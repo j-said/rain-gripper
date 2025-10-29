@@ -10,5 +10,9 @@ struct SensorData {
   float batteryVoltage;
   int batteryLevel;
   int reedCounter;
-  int loraRssi;
 };
+
+extern SensorData currentSensorData;
+
+void setupSensors();
+void readSensors(); 

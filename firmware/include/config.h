@@ -18,6 +18,7 @@
 #define DHT22_PIN         32    
 
 #define SOIL_MOISTURE_PIN 36   
+#define SOIL_TEMP_PIN     35   
 
 #define REED_SWITCH_PIN   33   
 

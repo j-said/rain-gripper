@@ -1,14 +1,20 @@
 #include <Arduino.h>
 
-#define LED_BUILTIN 13
+#include "sensors.h"
 
 void setup() {
-  pinMode(LED_BUILTIN, OUTPUT);
+    Serial.begin(115200);
+    setupSensors();
 }
 
 void loop() {
-  digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
-  delay(1000);                       // wait for a second
-  digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
-  delay(1000);                       // wait for a second
+    readSensors();
+    Serial.print("Air Temperature: ");
+    Serial.print(currentSensorData.air_temperature);
+    Serial.print(" °C, Air Humidity: ");
+    Serial.print(currentSensorData.air_humidity);
+    Serial.println(" %");
+    Serial.print(currentSensorData.soil_humidity);
+    Serial.println("");
+    delay(2000);
 }

@@ -8,11 +8,11 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "F:/projects/PlatformIO/gripper/include",
-                "F:/projects/PlatformIO/gripper/src",
-                "F:/projects/PlatformIO/gripper/.pio/libdeps/esp32dev/ArduinoJson/src",
-                "F:/projects/PlatformIO/gripper/.pio/libdeps/esp32dev/PubSubClient/src",
-                "F:/projects/PlatformIO/gripper/.pio/libdeps/esp32dev/TinyGSM/src",
+                "D:/projects/raingripper/firmware/include",
+                "D:/projects/raingripper/firmware/src",
+                "D:/projects/raingripper/firmware/.pio/libdeps/esp32dev/ArduinoJson/src",
+                "D:/projects/raingripper/firmware/.pio/libdeps/esp32dev/PubSubClient/src",
+                "D:/projects/raingripper/firmware/.pio/libdeps/esp32dev/TinyGSM/src",
                 "C:/Users/dimam/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
                 "C:/Users/dimam/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include",
                 "C:/Users/dimam/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include/esp_additions/freertos",
@@ -247,11 +247,11 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "F:/projects/PlatformIO/gripper/include",
-                    "F:/projects/PlatformIO/gripper/src",
-                    "F:/projects/PlatformIO/gripper/.pio/libdeps/esp32dev/ArduinoJson/src",
-                    "F:/projects/PlatformIO/gripper/.pio/libdeps/esp32dev/PubSubClient/src",
-                    "F:/projects/PlatformIO/gripper/.pio/libdeps/esp32dev/TinyGSM/src",
+                    "D:/projects/raingripper/firmware/include",
+                    "D:/projects/raingripper/firmware/src",
+                    "D:/projects/raingripper/firmware/.pio/libdeps/esp32dev/ArduinoJson/src",
+                    "D:/projects/raingripper/firmware/.pio/libdeps/esp32dev/PubSubClient/src",
+                    "D:/projects/raingripper/firmware/.pio/libdeps/esp32dev/TinyGSM/src",
                     "C:/Users/dimam/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
                     "C:/Users/dimam/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include",
                     "C:/Users/dimam/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include/esp_additions/freertos",

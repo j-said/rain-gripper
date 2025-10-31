@@ -1,0 +1,38 @@
+export const MOCK_DEVICES = [
+    {
+      id: 'dev-001',
+      fieldName: 'Північне Поле',
+      moisture: 30,
+      waterLevel: 5,
+      lat: 50.4501,
+      lon: 30.5234,
+      status: 'Online',
+    },
+    {
+      id: 'dev-002',
+      fieldName: 'Західний Сектор',
+      moisture: 75,
+      waterLevel: 25,
+      lat: 50.4612,
+      lon: 30.5011,
+      status: 'Online',
+    },
+    {
+      id: 'dev-003',
+      fieldName: 'Дальня Ділянка',
+      moisture: 50,
+      waterLevel: 15,
+      lat: 50.4455,
+      lon: 30.5399,
+      status: 'Offline',
+    },
+    {
+      id: 'dev-004',
+      fieldName: 'Південний Гай',
+      moisture: 88,
+      waterLevel: 42,
+      lat: 50.4321,
+      lon: 30.5123,
+      status: 'Online',
+    },
+  ];

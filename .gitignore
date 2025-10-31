@@ -8,3 +8,12 @@ firmware/.vscode/ipch
 firmware/.vscode/c_cpp_properties.json
 firmware/.vscode/extensions.json
 firmware/.vscode/launch.json
+venv/
+.env
+__pycache__/
+*.pyc
+.DS_Store
+.idea/
+.vscode/
+*.log
+>>>>>>> origin/back-end-python

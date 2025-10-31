@@ -35,7 +35,7 @@ FastAPI Server (main.py):
 /
 ├── main.py             # FastAPI сервер (API ендпоінти)
 ├── mqtt_listener.py    # MQTT сервіс (збереження даних у БД)
-├── crud.py             # Логіка запитів до БД (SELECT, INSERT...)
+├── crud.py             # Логіка запитів до БД (SELECT, NSERT...)
 ├── database.py         # Моделі SQLAlchemy та підключення до БД
 ├── schemas.py          # Моделі Pydantic (для валідації API)
 ├── config.py           # Завантаження налаштувань з .env

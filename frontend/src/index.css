@@ -248,3 +248,37 @@ body {
   margin-top: 24px; 
   z-index: 0; 
 }
+
+.command-button {
+  background-color: var(--color-bg-lighter);
+  color: var(--color-text);
+  border: 1px solid var(--color-text-muted);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.command-button:hover { background-color: var(--color-text-muted); color: var(--color-bg); }
+.command-button:disabled {
+  background-color: var(--color-bg-lighter);
+  color: var(--color-text-muted);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- НОВІ СТИЛІ: Status Messages --- */
+.status-message {
+  text-align: center;
+  padding: 40px;
+  font-size: 1.2rem;
+  color: var(--color-text-muted);
+}
+.status-message.error {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger);
+  border-radius: 8px;
+  padding: 20px;
+}

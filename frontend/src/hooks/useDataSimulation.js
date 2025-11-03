@@ -1,29 +1,24 @@
 import { useEffect } from 'react';
 import { useDeviceStore } from '../store/deviceStore';
 
-// Ми більше не будемо використовувати 'shallow' або 'useDeviceActions'
-
+// Цей хук запускає початкове завантаження
+// і встановлює інтервал для оновлення даних
 export const useDataSimulation = (intervalMs = 10000) => {
-  // --- НОВИЙ ПІДХІД ---
-  // Ми витягуємо кожну функцію окремо.
-  // Оскільки самі функції ніколи не змінюються,
-  // Zustand не буде викликати зайвих ре-рендерів.
+  // Витягуємо дії зі стору (стабільний метод)
   const fetchDevices = useDeviceStore((state) => state.fetchDevices);
-  const simulateUpdates = useDeviceStore((state) => state.simulateUpdates);
+  const updateDeviceData = useDeviceStore((state) => state.updateDeviceData);
 
   useEffect(() => {
-    // 1. Завантажуємо початкові дані
+    // 1. Завантажуємо дані 1 раз при старті
     fetchDevices();
 
-    // 2. Встановлюємо інтервал
+    // 2. Встановлюємо інтервал для оновлення
     const intervalId = setInterval(() => {
-      simulateUpdates();
+      updateDeviceData();
     }, intervalMs);
 
-    // 3. Прибираємо інтервал
+    // 3. Прибираємо інтервал при демонтажі
     return () => clearInterval(intervalId);
     
-    // Ці залежності тепер 100% стабільні, оскільки
-    // fetchDevices і simulateUpdates - це стабільні функції.
-  }, [fetchDevices, simulateUpdates, intervalMs]);
+  }, [fetchDevices, updateDeviceData, intervalMs]);
 };

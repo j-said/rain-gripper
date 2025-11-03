@@ -1,76 +1,126 @@
 import { create } from 'zustand';
-import { MOCK_DEVICES } from '../data/mockData';
 
-// --- Допоміжні функції ---
+// Ця функція перетворює дані з вашої схеми `SensorDataResponse`
+// у формат, який очікує наш фронтенд (UI).
+const adaptApiData = (apiDevice) => {
+  // apiDevice - це об'єкт SensorDataResponse
+  // { id: 1, created_at: "...", customer_id: "...", sub_device_id: "...", payload: {...} }
 
-// Обчислюємо "Field Risk Score" (0-100)
-// Це проста логіка, ви можете її ускладнити
-const calculateRiskScore = (moisture, waterLevel) => {
-  // Ризик від вологості (60% ваги)
-  const moistureRisk = Math.min(moisture, 100); // 0-100
-  
-  // Ризик від рівня води (40% ваги)
-  // Припустимо, 50 см - це 100% ризику
-  const waterRisk = Math.min((waterLevel / 50) * 100, 100); 
+  // --- Хелпери ---
+  const calculateRiskScore = (moisture, waterLevel) => {
+    const moistureRisk = Math.min(moisture || 0, 100);
+    const waterRisk = Math.min(((waterLevel || 0) / 50) * 100, 100);
+    const totalRisk = moistureRisk * 0.6 + waterRisk * 0.4;
+    return Math.round(totalRisk);
+  };
+  const getCondition = (riskScore) => {
+    if (riskScore > 75) return 'Небезпечно';
+    if (riskScore > 45) return 'Дуже волого';
+    if (riskScore > 25) return 'Помірно';
+    return 'Сухо';
+  };
+  // --- Кінець хелперів ---
 
-  const totalRisk = moistureRisk * 0.6 + waterRisk * 0.4;
-  return Math.round(totalRisk);
-};
+  // 1. Безпечно отримуємо 'payload', навіть якщо він null
+  const payload = apiDevice.payload || {};
 
-// Визначаємо стан поля на основі ризику
-const getCondition = (riskScore) => {
-  if (riskScore > 75) return 'Небезпечно';
-  if (riskScore > 45) return 'Дуже волого';
-  if (riskScore > 25) return 'Помірно';
-  return 'Сухо';
+  // 2. !!! ОСТАННЄ ПРИПУЩЕННЯ !!!
+  // Нам потрібно знати, як називаються ключі *всередині* 'payload'.
+  // Я припускаю, що вони називаються 'moisture', 'water_level_cm' тощо.
+  // **Якщо дані не з'являться, вам потрібно перевірити ці назви ключів.**
+  const moisture = payload.moisture || 0;
+  const waterLevel = payload.water_level_cm || 0;
+  const lat = payload.latitude || 50.45;
+  const lon = payload.longitude || 30.52;
+  const status = payload.is_online ? 'Online' : 'Offline';
+
+  // 3. Обчислюємо ризик на основі даних з payload
+  const riskScore = calculateRiskScore(moisture, waterLevel);
+
+  // 4. Повертаємо об'єкт, який очікує наш UI
+  return {
+    // Ми використовуємо 'sub_device_id' як ID для UI
+    id: apiDevice.sub_device_id,
+    fieldName: apiDevice.sub_device_id,
+    moisture: moisture,
+    waterLevel: waterLevel,
+    lat: lat,
+    lon: lon,
+    status: status,
+    riskScore: riskScore,
+    condition: getCondition(riskScore),
+    // Використовуємо 'created_at' з основного об'єкта
+    lastUpdated: new Date(apiDevice.created_at),
+  };
 };
 
 // --- Стор Zustand ---
-
-export const useDeviceStore = create((set) => ({
+export const useDeviceStore = create((set, get) => ({
   devices: [],
+  isLoading: false,
+  error: null,
+  customerId: 'customer_demo_id_123', // ID клієнта для MVP
 
-  // 1. Дія: Завантажити початкові дані
-  fetchDevices: () => {
-    const initialData = MOCK_DEVICES.map((dev) => {
-      const riskScore = calculateRiskScore(dev.moisture, dev.waterLevel);
-      return {
-        ...dev,
-        riskScore,
-        condition: getCondition(riskScore),
-        lastUpdated: new Date(),
-      };
-    });
-    set({ devices: initialData });
+  // --- Дія: Отримати дані з GET /api/v1/data/{customer_id} ---
+  fetchDevices: async (startDate = null, endDate = null) => {
+    set({ isLoading: true, error: null });
+    const customerId = get().customerId;
+
+    let url = `/api/v1/data/${customerId}`;
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate.toISOString());
+    if (endDate) params.append('end_date', endDate.toISOString());
+
+    const queryString = params.toString();
+    if (queryString) url += `?${queryString}`;
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.detail || 'Не вдалося завантажити дані');
+      }
+
+      const sensorData = await response.json(); // Отримуємо List[SensorDataResponse]
+      
+      // Використовуємо наш новий адаптер
+      const adaptedDevices = sensorData.map(adaptApiData);
+      
+      set({ devices: adaptedDevices, isLoading: false });
+    } catch (err) {
+      set({ error: err.message, isLoading: false });
+    }
   },
 
-  // 2. Дія: Симулювати оновлення (для setInterval)
-  simulateUpdates: () => {
-    set((state) => ({
-      devices: state.devices.map((dev) => {
-        // Симулюємо зміну даних +/- 5%
-        const moistureChange = (Math.random() - 0.5) * 10;
-        const waterLevelChange = (Math.random() - 0.5) * 4;
+  // --- Дія: Оновлення даних (для polling) ---
+  updateDeviceData: () => {
+    get().fetchDevices();
+  },
 
-        const newMoisture = Math.max(0, Math.min(100, dev.moisture + moistureChange));
-        const newWaterLevel = Math.max(0, dev.waterLevel + waterLevelChange);
-        
-        const newRiskScore = calculateRiskScore(newMoisture, newWaterLevel);
-        const newCondition = getCondition(newRiskScore);
+  // --- Дія: Надіслати команду POST /api/v1/command/{...} ---
+  sendCommand: async (sub_device_id, commandBody) => {
+    set({ isLoading: true, error: null });
+    const customerId = get().customerId;
 
-        // 10% шанс, що пристрій "вийде з мережі"
-        const newStatus = dev.status === 'Online' && Math.random() < 0.1 ? 'Offline' : 'Online';
+    try {
+      const response = await fetch(`/api/v1/command/${customerId}/${sub_device_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(commandBody),
+      });
 
-        return {
-          ...dev,
-          moisture: newMoisture,
-          waterLevel: newWaterLevel,
-          riskScore: newRiskScore,
-          condition: newCondition,
-          status: newStatus,
-          lastUpdated: new Date(),
-        };
-      }),
-    }));
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Помилка команди: ${errorData.detail || response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Команду надіслано, відповідь:', result);
+      set({ isLoading: false });
+      
+      get().fetchDevices();
+    } catch (err) {
+      set({ error: err.message, isLoading: false });
+    }
   },
 }));

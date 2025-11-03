@@ -1,5 +1,6 @@
 import React from 'react';
 import RiskGauge from './RiskGauge';
+import { useDeviceStore } from '../store/deviceStore';
 
 // Маленький компонент-індикатор статусу
 const StatusIndicator = ({ status }) => (
@@ -10,7 +11,9 @@ const StatusIndicator = ({ status }) => (
 );
 
 const FieldCard = ({ device }) => {
-  
+  // Отримуємо дію зі стору
+  const sendCommand = useDeviceStore((state) => state.sendCommand);
+
   // Функція для отримання CSS-класу на основі ризику
   const getConditionClass = (condition) => {
     switch (condition) {
@@ -23,6 +26,19 @@ const FieldCard = ({ device }) => {
   };
   
   const cardRiskClass = getConditionClass(device.condition);
+
+  // Обробник для кнопки команди
+  const handleSendCommand = () => {
+    // Тіло запиту 'CommandRequest'
+    // Використовуємо 'action' як підтверджено з main.py
+    const commandBody = {
+      action: "REBOOT_DEVICE", // Приклад команди
+      parameters: { delay_ms: 500 } // Приклад параметрів
+    };
+    
+    console.log(`Надсилаю команду до ${device.id}...`);
+    sendCommand(device.id, commandBody);
+  };
 
   return (
     <div className={`field-card ${cardRiskClass}`}>
@@ -40,7 +56,7 @@ const FieldCard = ({ device }) => {
           </div>
           <div className="metric">
             <span>Рівень води</span>
-            <strong>{device.waterLevel.toFixed(1)} мм/м^2</strong>
+            <strong>{device.waterLevel.toFixed(1)} см</strong>
           </div>
           <div className="metric">
             <span>Координати</span>
@@ -57,6 +73,16 @@ const FieldCard = ({ device }) => {
         <div className={`condition-badge ${cardRiskClass}`}>
           {device.condition}
         </div>
+        
+        {/* Нова кнопка команди */}
+        <button 
+          onClick={handleSendCommand} 
+          className="command-button"
+          disabled={device.status !== 'Online'} // Блокуємо, якщо офлайн
+        >
+          Надіслати команду
+        </button>
+        
         <div className="update-time">
           <StatusIndicator status={device.status} />
           Оновлено: {device.lastUpdated.toLocaleTimeString('uk-UA')}

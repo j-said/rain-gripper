@@ -1,7 +1,18 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
-// https://vite.dev/config/
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-})
+  server: {
+    proxy: {
+      // Будь-який запит, що починається з /api
+      '/api': {
+        // Перенаправляємо на порт 8000, як вказано у main.py
+        target: 'http://localhost:8000',
+        changeOrigin: true, // Необхідно для віртуальних хостів
+        secure: false,      // Дозволити на http
+      },
+    },
+  },
+});

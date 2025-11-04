@@ -1,19 +1,19 @@
 import logging
 import json
-from contextlib import asynccontextmanager
+import uuid
 from datetime import datetime, timedelta
 from typing import List
+from contextlib import asynccontextmanager
 
 import uvicorn
-import paho.mqtt.client as paho
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 # Локальні імпорти
 import crud
 import schemas
 import mqtt_publisher
-from database import SessionLocal, engine, Base
+from database import SessionLocal, engine, Base, User, DeviceGroup, Device
 from config import settings
 
 # Налаштовуємо логування
@@ -29,10 +29,10 @@ except Exception as e:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Код при старті
+    log.info("FastAPI запуск...")
     mqtt_publisher.connect_mqtt()
     yield
-    # Код при зупинці
+    log.info("FastAPI зупинка...")
     mqtt_publisher.disconnect_mqtt()
 
 
@@ -91,8 +91,141 @@ def read_root():
     return {"status": "ok", "message": "Welcome to RainGripper API"}
 
 
-# TODO GET rquest to update sensor logs for the frontend from DB   MUST TAKE: humidity: float, water_level: float, (? coordinates: str)
-# TODO GET request to send list of devices from DB to frontend !!
+# --- Users ---
+
+
+@app.post(
+    "/api/v1/users/", response_model=schemas.User, status_code=status.HTTP_201_CREATED
+)  # Create User (FUTURE)
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    return crud.create_user(db=db, user=user)
+
+
+@app.get("/api/v1/users/", response_model=List[schemas.User])
+def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    users = crud.get_users(db, skip=skip, limit=limit)
+    return users
+
+
+@app.get("/api/v1/users/{user_id}", response_model=schemas.User)
+def read_user(user_id: uuid.UUID, db: Session = Depends(get_db)):
+    db_user = crud.get_user(db, user_id=user_id)
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+
+
+# --- Device Groups ---
+
+
+@app.post(
+    "/api/v1/users/{user_id}/groups/",
+    response_model=schemas.DeviceGroup,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_device_group_for_user(
+    user_id: uuid.UUID, group: schemas.DeviceGroupCreate, db: Session = Depends(get_db)
+):
+    db_user = crud.get_user(db, user_id=user_id)
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return crud.create_device_group(db=db, group=group, user_id=user_id)
+
+
+# GET user devices groups SASHA DO IT
+@app.get("/api/v1/users/{user_id}/groups/", response_model=List[schemas.DeviceGroup])
+def read_user_device_groups(
+    user_id: uuid.UUID, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
+):
+    db_user = crud.get_user(db, user_id=user_id)
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    groups = crud.get_device_groups_by_user(db, user_id=user_id, skip=skip, limit=limit)
+    return groups
+
+
+# --- Devices ---
+
+
+@app.post(
+    "/api/v1/groups/{group_id}/devices/",
+    response_model=schemas.Device,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_device_for_group(
+    group_id: uuid.UUID, device: schemas.DeviceCreate, db: Session = Depends(get_db)
+):
+    # TODO: Додати перевірку, чи group_id існує
+    return crud.create_device(db=db, device=device, group_id=group_id)
+
+
+# GET rquest of devices in grops SASHA DO IT
+@app.get("/api/v1/groups/{group_id}/devices/", response_model=List[schemas.Device])
+def read_group_devices(
+    group_id: uuid.UUID, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
+):
+    # TODO: Додати перевірку, чи group_id існує
+    devices = crud.get_devices_by_group(db, group_id=group_id, skip=skip, limit=limit)
+    return devices
+
+
+# --- Sensor Data ---
+
+
+# GET rquest to update sensor logs SASHA DO IT
+@app.get("/api/v1/data/{user_id}", response_model=List[schemas.SensorDataResponse])
+def get_data_slice(
+    user_id: str,  # Залишаємо str для сумісності з crud, але краще uuid.UUID
+    db: Session = Depends(get_db),
+    start_date: datetime = Query(default=None),
+    end_date: datetime = Query(default=None),
+):
+    """
+    Отримує зріз даних для клієнта за вказаний період.
+    """
+    if end_date is None:
+        end_date = datetime.now(timezone.utc)
+    if start_date is None:
+        start_date = end_date - timedelta(days=1)
+
+    try:
+        data = crud.get_sensor_data(
+            db=db, user_id=user_id, start_date=start_date, end_date=end_date
+        )
+        return data
+    except Exception as e:
+        log.error(f"Помилка в ендпоінті get_data_slice: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Внутрішня помилка сервера")
+
+
+# --- Commands (MQTT) ---
+
+
+@app.post(
+    "/api/v1/command/{user_id}/{device_group}", status_code=status.HTTP_202_ACCEPTED
+)
+def send_command_to_device(
+    user_id: str,
+    device_group: str,  # (напр. 'Main Garden' або 'all')
+    command: schemas.CommandRequest,
+):
+    """
+    Надсилає команду на конкретну групу пристроїв
+    через MQTT.
+    """
+    log.info(f"Отримано API запит на команду для {user_id}/{device_group}")
+
+    # Передаємо роботу MQTT-паблішеру
+    # (Ця функція викличе HTTPException у разі помилки)
+    publish_mqtt_command(user_id, device_group, command)
+
+    return {
+        "status": "accepted",
+        "message": f"Команду '{command.action}' надіслано у топік.",
+    }
 
 
 @app.get("/api/v1/data/{user_id}", response_model=List[schemas.SensorDataResponse])
@@ -120,26 +253,24 @@ def get_data_slice(
         raise HTTPException(status_code=500, detail="Внутрішня помилка сервера")
 
 
-# @app.post("/api/v1/command/{user_id}/{sub_device_id}", status_code=202)  # Accepted
-# def send_command_to_device(
-#     user_id: str,
-#     sub_device_id: str,  # (напр. 'gateway_A' або 'all')
-#     command: schemas.CommandRequest,
-# ):
-#     """
-#     Надсилає команду на конкретний пристрій (або групу)
-#     через MQTT.
-#     """
-#     log.info(f"Отримано API запит на команду для {user_id}/{sub_device_id}")
+@app.post("/api/v1/command/{user_id}/{sub_device_id}", status_code=202)  # Accepted
+def send_command_to_device(
+    user_id: str,
+    sub_device_id: str,  # (напр. 'gateway_A' або 'all')
+    command: schemas.CommandRequest,
+):
+    """
+    Надсилає команду на конкретний пристрій (або групу)
+    через MQTT.
+    """
+    log.info(f"Отримано API запит на команду для {user_id}/{sub_device_id}")
 
-#     # Передаємо роботу MQTT-паблішеру
-#     # (Ця функція викличе HTTPException у разі помилки)
-# publish_mqtt_command(user_id, sub_device_id, command)
+    publish_mqtt_command(user_id, sub_device_id, command)
 
-#     return {
-#         "status": "accepted",
-#         "message": f"Команду '{command.action}' надіслано у топік.",
-#     }
+    return {
+        "status": "accepted",
+        "message": f"Команду '{command.action}' надіслано у топік.",
+    }
 
 
 if __name__ == "__main__":

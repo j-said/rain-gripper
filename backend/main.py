@@ -1,7 +1,7 @@
 import logging
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List
 from contextlib import asynccontextmanager
 
@@ -175,10 +175,9 @@ def read_group_devices(
 # --- Sensor Data ---
 
 
-# GET rquest to update sensor logs SASHA DO IT
 @app.get("/api/v1/data/{user_id}", response_model=List[schemas.SensorDataResponse])
 def get_data_slice(
-    user_id: str,  # Залишаємо str для сумісності з crud, але краще uuid.UUID
+    user_id: str,
     db: Session = Depends(get_db),
     start_date: datetime = Query(default=None),
     end_date: datetime = Query(default=None),
@@ -221,51 +220,6 @@ def send_command_to_device(
     # Передаємо роботу MQTT-паблішеру
     # (Ця функція викличе HTTPException у разі помилки)
     publish_mqtt_command(user_id, device_group, command)
-
-    return {
-        "status": "accepted",
-        "message": f"Команду '{command.action}' надіслано у топік.",
-    }
-
-
-@app.get("/api/v1/data/{user_id}", response_model=List[schemas.SensorDataResponse])
-def get_data_slice(
-    user_id: str,
-    db: Session = Depends(get_db),
-    start_date: datetime = Query(default=None),
-    end_date: datetime = Query(default=None),
-):
-    """
-    Отримує зріз даних для клієнта за вказаний період.
-    """
-    if end_date is None:
-        end_date = datetime.now()
-    if start_date is None:
-        start_date = end_date - timedelta(days=1)
-
-    try:
-        data = crud.get_sensor_data(
-            db=db, user_id=user_id, start_date=start_date, end_date=end_date
-        )
-        return data
-    except Exception as e:
-        log.error(f"Помилка в ендпоінті get_data_slice: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Внутрішня помилка сервера")
-
-
-@app.post("/api/v1/command/{user_id}/{sub_device_id}", status_code=202)  # Accepted
-def send_command_to_device(
-    user_id: str,
-    sub_device_id: str,  # (напр. 'gateway_A' або 'all')
-    command: schemas.CommandRequest,
-):
-    """
-    Надсилає команду на конкретний пристрій (або групу)
-    через MQTT.
-    """
-    log.info(f"Отримано API запит на команду для {user_id}/{sub_device_id}")
-
-    publish_mqtt_command(user_id, sub_device_id, command)
 
     return {
         "status": "accepted",

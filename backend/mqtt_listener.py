@@ -64,7 +64,7 @@ def on_message(client, userdata, msg):
                     owner_user_id=user_id,
                     device_id=device_id,
                     payload=payload_json,
-                    timestamp=datetime.utcnow(), # timezone
+                    timestamp=datetime.datetime.now(datetime.UTC), # current UTC timestamp
                 )
                 records_to_add.append(db_record)
 

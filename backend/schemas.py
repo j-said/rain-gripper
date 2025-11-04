@@ -1,8 +1,8 @@
-from pydantic import BaseModel, Field
-from datetime import datetime
-
 # pydantic_core._pydantic_core.PydanticOmit: Модель для .from_attributes
 from pydantic import ConfigDict
+from pydantic import BaseModel, Field
+from datetime import datetime
+import uuid
 
 
 class CommandRequest(BaseModel):
@@ -22,17 +22,13 @@ class CommandRequest(BaseModel):
 class SensorDataResponse(BaseModel):
     """
     Схема Pydantic для повернення даних з API.
+    (ОНОВЛЕНО, щоб відповідати моделі SensorData)
     """
 
     id: int
-    created_at: datetime
-    customer_id: str
-    sub_device_id: str
-    data_type: str
-
-    # Очікуємо, що payload буде JSON (dict у Python)
+    owner_user_id: uuid.UUID
+    device_id: uuid.UUID
+    timestamp: datetime
     payload: dict | None
 
-    # Дозволяє Pydantic читати дані
-    # з атрибутів об'єкта SQLAlchemy (model.id)
     model_config = ConfigDict(from_attributes=True)

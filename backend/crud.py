@@ -2,32 +2,33 @@ import logging
 from datetime import datetime
 from sqlalchemy.orm import Session
 
-# Імпортуємо наші моделі SQLAlchemy
-from database import SensorData
+# SQLAlchemy
+from database import SensorData, User, Device, DeviceGroup
 
 log = logging.getLogger(__name__)
 
 
+# Denormalized
 def get_sensor_data(
-    db: Session, customer_id: str, start_date: datetime, end_date: datetime
+    db: Session, user_id: str, start_date: datetime, end_date: datetime
 ):
     """
-    Отримує зріз даних з БД для конкретного клієнта
-    та часового діапазону.
+    Отримує дані, використовуючи швидку денормалізовану схему.
     """
-    log.info(f"Запит даних для {customer_id} з {start_date} по {end_date}")
+    log.info(f"Запит даних для {user_id} з {start_date} по {end_date}")
 
     try:
         query = (
             db.query(SensorData)
             .filter(
-                SensorData.customer_id == customer_id,
-                SensorData.created_at >= start_date,
-                SensorData.created_at <= end_date,
+                SensorData.owner_user_id == user_id,
+                SensorData.timestamp >= start_date,
+                SensorData.timestamp <= end_date,
             )
-            .order_by(SensorData.created_at.asc())
+            .order_by(SensorData.timestamp.asc())
         )
-
+        # TODO: check if DB uses proper indexes for this query
+        # log.info(query)
         return query.all()
 
     except Exception as e:

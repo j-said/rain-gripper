@@ -1,47 +1,53 @@
 # RainGripper IoT Backend
 
-Це backend-сервіс для проєкту RainGripper. Виконує дві основні задачі:
+Це backend-сервіс для проєкту RainGripper. Побудований на асинхронній архітектурі, що розділяє прийом даних (MQTT) та обслуговування API (FastAPI).
 
-- Прийом даних (Ingestion): слухає MQTT-топіки, парсить payload від пристроїв і зберігає в PostgreSQL.
-- Надання API (API Serving): REST API для веб-порталу — отримання даних і надсилання команд пристроям.
+## Архітектура — коротко
 
-## Архітектура
+- Прийом даних (Data ingestion): `mqtt_connect.py` слухає MQTT-топіки, парсить JSON-пейлоди від пристроїв і записує дані в PostgreSQL.
+- Надання API: `main.py` запускає FastAPI REST API для веб-порталу (отримання даних, керування користувачами/пристроями) і надсилання команд пристроям через MQTT.
 
-Проєкт складається з двох сервісів, що працюють одночасно:
+## Сервіси
 
-### MQTT Listener (mqtt_listener.py)
-- Підключається до MQTT-брокера (налаштування у `config.py`).
-- Підписується на топіки `clients/#`.
-- При отриманні повідомлення парсить топік `clients/{cust_id}/{dev_id}/{type}` і JSON payload.
-- Записує записи у таблицю `sensor_data` в PostgreSQL.
+1. MQTT Listener (`mqtt_connect.py`)
+  - Окремий процес Python.
+  - Підключається до MQTT-брокера з постійним з'єднанням.
+  - Підписується на топіки даних (наприклад `+/+/data`).
+  - Парсить JSON повідомлення й записує дані в таблицю SensorData через `database.py` і `get_db_session`.
+  - Використовує масові вставки (`add_all` / `commit`) для продуктивності.
 
-### FastAPI Server (main.py)
-- Запускає веб-сервер (Uvicorn).
-- Надає REST ендпоінти для взаємодії з даними.
-- Виконує запити до БД через `crud.py`.
-- Використовує Pydantic (`schemas.py`) для валідації вхідних даних.
+2. FastAPI Server (`main.py`)
+  - Запускає вебсервер (Uvicorn).
+  - REST ендпоінти для CRUD: Users, DeviceGroups, Devices, та отримання даних сенсорів.
+  - Валідaція через Pydantic (`schemas.py`).
+  - Стійкий MQTT-клієнт для публікації команд (`mqtt_publisher.py`) керується через lifespan FastAPI.
+  - API-ендпоінти використовують `mqtt_publisher.publish()` для миттєвого надсилання команд.
 
 ## Структура проєкту
+
 ```
 /
-├── main.py             # FastAPI сервер (API ендпоінти)
-├── mqtt_listener.py    # MQTT сервіс (збереження даних у БД)
+├── main.py             # FastAPI сервер (ендпоінти, lifespan)
+├── mqtt_connect.py     # MQTT Listener (сервіс прийому даних)
+├── mqtt_client.py      # MQTT Client (для FastAPI паблішера)
+├── mqtt_publisher.py   # Логіка публікації команд
 ├── crud.py             # Логіка запитів до БД (SELECT, INSERT...)
 ├── database.py         # Моделі SQLAlchemy та підключення до БД
-├── schemas.py          # Моделі Pydantic (валидація API)
+├── schemas.py          # Моделі Pydantic (валідація API)
 ├── config.py           # Завантаження налаштувань з .env
 ├── requirements.txt    # Залежності Python
+├── seed_db.py          # (Опціонально) Скрипт для заповнення БД
 └── .env.example        # Приклад файлу налаштувань
 ```
 
-## Налаштування та запуск
+## Вимоги
 
-### 1) Вимоги
 - Python 3.10+
 - PostgreSQL сервер
-- Ubuntu (для apt-команд, за потреби)
+- Ubuntu (для прикладів apt)
 
-### 2) Встановлення (Ubuntu)
+## Встановлення (Ubuntu)
+
 ```bash
 # Оновити і встановити клієнт PostgreSQL
 sudo apt update
@@ -53,121 +59,136 @@ source venv/bin/activate
 
 # Встановити залежності
 pip install -r requirements.txt
-```
 
-### 3) Налаштування бази даних
-```sql
--- Увійдіть у psql як postgres
-sudo -u postgres psql
 
--- Створіть користувача та БД (замініть на свої дані)
+3) Налаштування бази даних
+
+(Використовуйте psql або інший клієнт)
+
 CREATE USER my_user WITH PASSWORD 'my_password';
 CREATE DATABASE raingripper_db;
 GRANT ALL PRIVILEGES ON DATABASE raingripper_db TO my_user;
-
--- Надайте права на схему
 \c raingripper_db
 GRANT USAGE ON SCHEMA public TO my_user;
 GRANT CREATE ON SCHEMA public TO my_user;
 \q
-```
 
-### 4) Налаштування проєкту
-```bash
+
+4) Налаштування проєкту
+
 # Створіть .env з прикладу
 cp .env.example .env
 
 # Відредагуйте .env
 nano .env
-```
 
-Приклад `.env`:
-```
-DB_USER=my_user
-DB_PASSWORD=my_password
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=raingripper_db
 
-MQTT_BROKER=your.broker-address.com
-MQTT_PORT=8883
-MQTT_USERNAME=your_mqtt_user
-MQTT_PASSWORD=your_mqtt_password
-```
+(DB_USER, DB_PASSWORD, MQTT_BROKER тощо)
 
-### 5) Створення таблиць
-Запустіть `database.py` один раз, щоб створити таблицю `sensor_data`:
-```bash
+5) Створення таблиць
+
+Запустіть database.py один раз, щоб створити таблиці.
+
 python database.py
-# Очікуваний результат: таблиці успішно створено
-```
+# Очікуваний результат: Таблиці успішно створено...
 
-### 6) Запуск сервісів
-Запустіть два процеси в окремих терміналах або використайте supervisor/systemd:
+
+6) (Опціонально) Заповнення БД
+
+Запустіть seed_db.py для додавання тестових даних.
+
+python seed_db.py
+
+
+7) Запуск сервісів
+
+Запустіть два процеси в окремих терміналах.
 
 Термінал 1 — MQTT Listener:
-```bash
-python mqtt_listener.py
-```
+
+python mqtt_connect.py
+
 
 Термінал 2 — FastAPI Server:
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
 
-## API документація
-Після запуску FastAPI документація доступна:
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+
+API Документація
+
+Після запуску FastAPI, інтерактивна документація (Swagger) доступна:
 http://127.0.0.1:8000/docs
 
-### GET /api/v1/data/{customer_id}
-Отримує зріз даних для клієнта.
+Керування користувачами
+
+POST /api/v1/users/ - Створити нового користувача.
+
+GET /api/v1/users/ - Отримати список користувачів.
+
+GET /api/v1/users/{user_id} - Отримати конкретного користувача.
+
+Керування групами (DeviceGroups)
+
+POST /api/v1/users/{user_id}/groups/ - Створити групу для користувача.
+
+GET /api/v1/users/{user_id}/groups/ - Отримати групи користувача.
+
+Керування пристроями (Devices)
+
+POST /api/v1/groups/{group_id}/devices/ - Створити пристрій у групі.
+
+GET /api/v1/groups/{group_id}/devices/ - Отримати пристрої групи.
+
+GET /api/v1/users/{user_id}/devices/ - Отримати всі пристрої користувача одним запитом.
+
+Отримання даних сенсорів (Sensor Logs)
+
+GET /api/v1/data/{user_id}
+
+Отримує зріз даних (логів) для конкретного користувача.
 
 Query-параметри:
-- `start_date` (datetime, опціонально) — початок періоду.
-- `end_date` (datetime, опціонально) — кінець періоду.
+
+start_date (datetime, опціонально) — початок періоду (UTC).
+
+end_date (datetime, опціонально) — кінець періоду (UTC).
 (Якщо не вказано — береться останні 24 години.)
 
-Успішна відповідь (200):
-```json
+Успішна відповідь (200 OK):
+
 [
   {
     "id": 1,
-    "created_at": "2025-10-30T10:00:00Z",
-    "customer_id": "cust_123",
-    "sub_device_id": "gateway_A",
-    "data_type": "logs",
-    "payload": { "temp": 21.5, "humidity": 45.1 }
+    "owner_user_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+    "device_id": "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33",
+    "timestamp": "2025-11-04T12:00:00Z",
+    "payload": {
+      "humidity": 45.1,
+      "water_level": 88.0
+    }
   }
 ]
-```
 
-### POST /api/v1/command/{customer_id}/{sub_device_id}
-Надсилає команду на пристрій через MQTT.
+Надсилання команд
 
-URL-параметри:
-- `customer_id` (string) — ID клієнта.
-- `sub_device_id` (string) — ID пристрою або `all`.
+POST /api/v1/command/{user_id}/{device_group}
 
-Тіло запиту (JSON) — приклад:
-```json
+Надсилає команду на групу пристроїв через MQTT.
+
+Тіло запиту (JSON):
+
 {
   "action": "send_data",
   "parameters": { "force": true }
 }
-```
+
 
 Успішна відповідь (202 Accepted):
-```json
+
 {
   "status": "accepted",
   "message": "Команду 'send_data' надіслано у топік."
 }
-```
 
-Цей ендпоінт публікує повідомлення у топік:
-`clients/{customer_id}/{sub_device_id}/command`
 
--- Короткі поради
-- Переконайтесь, що `MQTT_PORT`, сертифікати та доступи коректні для TLS (якщо використовується).
-- Логи MQTT listener і FastAPI допоможуть діагностувати проблеми з підключенням або серіалізацією повідомлень.
-- Використовуйте supervisor або systemd для автозапуску обох сервісів у продакшені.
+Цей ендпоінт публікує повідомлення у топік: {user_id}/{device_group}/command

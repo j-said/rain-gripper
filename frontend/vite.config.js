@@ -8,7 +8,7 @@ export default defineConfig({
     proxy: {
       // Будь-який запит, що починається з /api
       '/api': {
-        // Перенаправляємо на порт 8000, як вказано у main.py
+        // Перенаправляємо на порт 8000
         target: 'http://localhost:8000',
         changeOrigin: true, // Необхідно для віртуальних хостів
         secure: false,      // Дозволити на http

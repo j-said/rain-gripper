@@ -3,7 +3,6 @@ import datetime
 import logging
 import json
 import sys
-import ssl 
 
 # Importing configuration and database modules
 from config import settings
@@ -101,11 +100,8 @@ if __name__ == "__main__":
         log.info("Підключення без логіну/паролю.")
 
     if settings.MQTT_PORT == 8883:
-            log.info("Увімкнено TLS (порт 8883) - ІГНОРУЄМО ПЕРЕВІРКУ СЕРТИФІКАТА.")
-            # Вказуємо, що ми не перевіряємо сертифікат
-            mqtt_client.tls_set(tls_version=ssl.PROTOCOL_TLS_CLIENT, cert_reqs=ssl.CERT_NONE)
-            # Дозволяємо "небезпечне" з'єднання
-            mqtt_client.tls_insecure_set(True)
+        log.info("Увімкнено TLS (порт 8883).")
+        mqtt_client.tls_set()
 
     try:
         mqtt_client.connect(settings.MQTT_BROKER, settings.MQTT_PORT, 60)

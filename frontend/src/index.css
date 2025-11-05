@@ -32,24 +32,14 @@ body {
   max-width: 1400px;
   margin: 0 auto;
 }
-
 .app-header {
   text-align: center;
   margin-bottom: 32px;
   border-bottom: 2px solid var(--color-bg-light);
   padding-bottom: 24px;
 }
-
-.app-header h1 {
-  margin: 0;
-  color: white;
-}
-
-.app-header p {
-  margin: 4px 0 0;
-  color: var(--color-text-muted);
-  font-size: 1.1rem;
-}
+.app-header h1 { margin: 0; color: white; }
+.app-header p { margin: 4px 0 0; color: var(--color-text-muted); font-size: 1.1rem; }
 
 /* --- Dashboard Grid --- */
 .dashboard-grid {
@@ -68,20 +58,21 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  /* Кольорова ліва рамка для ризику */
   border-left: 5px solid var(--color-safe);
 }
-
-/* Кольорові рамки */
 .field-card.condition-safe { border-left-color: var(--color-safe); }
 .field-card.condition-moderate { border-left-color: var(--color-moderate); }
 .field-card.condition-high { border-left-color: var(--color-high); }
 .field-card.condition-danger { border-left-color: var(--color-danger); }
 
-
-.field-card:hover {
+/* --- Клікабельна картка --- */
+.field-card.clickable {
+  cursor: pointer;
+}
+.field-card.clickable:hover {
   transform: translateY(-5px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  border-color: var(--color-text);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
 }
 
 .card-header {
@@ -91,13 +82,7 @@ body {
   padding: 16px 20px;
   background-color: var(--color-bg-lighter);
 }
-
-.card-header h3 {
-  margin: 0;
-  font-size: 1.25rem;
-  color: white;
-}
-
+.card-header h3 { margin: 0; font-size: 1.25rem; color: white; }
 .device-id {
   font-family: 'Courier New', Courier, monospace;
   font-size: 0.9rem;
@@ -114,35 +99,11 @@ body {
   padding: 20px;
   align-items: center;
 }
-
-.data-metrics {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.metric {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
-.metric span {
-  color: var(--color-text-muted);
-  font-size: 0.9rem;
-}
-
-.metric strong {
-  color: white;
-  font-size: 1.4rem;
-  font-weight: 600;
-}
-
-.risk-display {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
+.data-metrics { display: flex; flex-direction: column; gap: 12px; }
+.metric { display: flex; justify-content: space-between; align-items: baseline; }
+.metric span { color: var(--color-text-muted); font-size: 0.9rem; }
+.metric strong { color: white; font-size: 1.4rem; font-weight: 600; }
+.risk-display { display: flex; justify-content: center; align-items: center; }
 
 .card-footer {
   display: flex;
@@ -153,102 +114,45 @@ body {
   border-top: 1px solid var(--color-bg-lighter);
   font-size: 0.9rem;
 }
-
-.update-time {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--color-text-muted);
-}
+.update-time { display: flex; align-items: center; gap: 8px; color: var(--color-text-muted); }
 
 /* --- Condition Badge --- */
-.condition-badge {
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 0.85rem;
-}
-
+.condition-badge { font-weight: 700; padding: 4px 10px; border-radius: 12px; font-size: 0.85rem; }
 .condition-badge.condition-safe { background-color: var(--color-safe-bg); color: var(--color-safe); }
 .condition-badge.condition-moderate { background-color: var(--color-moderate-bg); color: var(--color-moderate); }
 .condition-badge.condition-high { background-color: var(--color-high-bg); color: var(--color-high); }
 .condition-badge.condition-danger { background-color: var(--color-danger-bg); color: var(--color-danger); }
 
-
 /* --- Status Indicator --- */
-.status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background-color: var(--color-offline);
-  animation: pulse-offline 2s infinite;
-}
-
-.status-dot.online {
-  background-color: var(--color-online);
-  animation: pulse-online 1.5s infinite;
-}
-
+.status-dot { width: 10px; height: 10px; border-radius: 50%; background-color: var(--color-offline); animation: pulse-offline 2s infinite; }
+.status-dot.online { background-color: var(--color-online); animation: pulse-online 1.5s infinite; }
 @keyframes pulse-online {
   0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); }
   70% { box-shadow: 0 0 0 10px rgba(46, 204, 113, 0); }
   100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
 }
-
-@keyframes pulse-offline {
-  0% { opacity: 0.6; }
-  50% { opacity: 1; }
-  100% { opacity: 0.6; }
-}
-
+@keyframes pulse-offline { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
 
 /* --- Risk Gauge --- */
-.gauge-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.gauge-dial {
-  width: 90px;
-  height: 90px;
-  border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  transition: background 0.5s ease;
-}
-
+.gauge-container { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.gauge-dial { width: 90px; height: 90px; border-radius: 50%; display: flex; justify-content: center; align-items: center; transition: background 0.5s ease; }
 .gauge-value {
-  width: 70px;
-  height: 70px;
-  border-radius: 50%;
+  width: 70px; height: 70px; border-radius: 50%;
   background-color: var(--color-bg-light);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: white;
+  display: flex; justify-content: center; align-items: center;
+  font-size: 1.75rem; font-weight: 700; color: white;
 }
-
-.gauge-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-}
+.gauge-label { font-size: 0.8rem; font-weight: 600; color: var(--color-text-muted); text-transform: uppercase; }
 
 /* --- Map Container --- */
 .map-container {
-  height: 450px; 
-  width: 100%;
+  height: 450px; width: 100%;
   border-radius: 12px;
-  margin-top: 24px; 
-  z-index: 0; 
+  margin-top: 24px;
+  z-index: 0;
 }
 
+/* --- Command Button --- */
 .command-button {
   background-color: var(--color-bg-lighter);
   color: var(--color-text);
@@ -260,7 +164,6 @@ body {
   font-weight: 600;
   transition: all 0.2s ease;
 }
-
 .command-button:hover { background-color: var(--color-text-muted); color: var(--color-bg); }
 .command-button:disabled {
   background-color: var(--color-bg-lighter);
@@ -269,7 +172,7 @@ body {
   cursor: not-allowed;
 }
 
-/* --- НОВІ СТИЛІ: Status Messages --- */
+/* --- Status Messages --- */
 .status-message {
   text-align: center;
   padding: 40px;
@@ -281,4 +184,62 @@ body {
   color: var(--color-danger);
   border-radius: 8px;
   padding: 20px;
+}
+
+/* --- Модальне вікно --- */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
+}
+
+.modal-content {
+  background-color: var(--color-bg-light);
+  border: 1px solid var(--color-bg-lighter);
+  border-radius: 12px;
+  padding: 24px;
+  width: 90vw;
+  height: 90vh;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-content h2 {
+  color: white;
+  margin-top: 0;
+  text-align: center;
+}
+
+.modal-close-button {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 2.5rem;
+  font-weight: bold;
+  cursor: pointer;
+  line-height: 1;
+}
+.modal-close-button:hover {
+  color: white;
+}
+
+/* --- Контейнер для графіка --- */
+.chart-container {
+  flex-grow: 1; 
+  width: 100%;
+  height: calc(100% - 50px);
+  font-size: 0.9rem;
 }

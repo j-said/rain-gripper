@@ -2,7 +2,6 @@ import React from 'react';
 import RiskGauge from './RiskGauge';
 import { useDeviceStore } from '../store/deviceStore';
 
-// Маленький компонент-індикатор статусу
 const StatusIndicator = ({ status }) => (
   <span 
     className={`status-dot ${status === 'Online' ? 'online' : 'offline'}`}
@@ -11,10 +10,9 @@ const StatusIndicator = ({ status }) => (
 );
 
 const FieldCard = ({ device }) => {
-  // Отримуємо дію зі стору
   const sendCommand = useDeviceStore((state) => state.sendCommand);
+  const openDeviceModal = useDeviceStore((state) => state.openDeviceModal); 
 
-  // Функція для отримання CSS-класу на основі ризику
   const getConditionClass = (condition) => {
     switch (condition) {
       case 'Небезпечно': return 'condition-danger';
@@ -27,24 +25,29 @@ const FieldCard = ({ device }) => {
   
   const cardRiskClass = getConditionClass(device.condition);
 
-  // Обробник для кнопки команди
-  const handleSendCommand = () => {
-    // Тіло запиту 'CommandRequest'
-    // Використовуємо 'action' як підтверджено з main.py
-    const commandBody = {
-      action: "REBOOT_DEVICE", // Приклад команди
-      parameters: { delay_ms: 500 } // Приклад параметрів
-    };
+  const handleSendCommand = (e) => {
+    // Зупиняємо "спливання" кліку
+    e.stopPropagation(); 
     
-    console.log(`Надсилаю команду до ${device.id}...`);
-    sendCommand(device.id, commandBody);
+    const commandBody = {
+      action: "REBOOT_DEVICE", 
+      parameters: { delay_ms: 500 }
+    };
+    sendCommand(device.deviceGroup, commandBody); 
+  };
+  
+  const handleCardClick = () => {
+    openDeviceModal(device.id); // Викликаємо дію з ID пристрою
   };
 
   return (
-    <div className={`field-card ${cardRiskClass}`}>
+    <div 
+      className={`field-card ${cardRiskClass} clickable`}
+      onClick={handleCardClick}
+    >
       
       <div className="card-header">
-        <h3>{device.fieldName}</h3>
+        <h3>{device.fieldName}</h3> 
         <span className="device-id">{device.id}</span>
       </div>
 
@@ -56,11 +59,7 @@ const FieldCard = ({ device }) => {
           </div>
           <div className="metric">
             <span>Рівень води</span>
-            <strong>{device.waterLevel.toFixed(1)} см</strong>
-          </div>
-          <div className="metric">
-            <span>Координати</span>
-            <strong>{device.lat.toFixed(3)}, {device.lon.toFixed(3)}</strong>
+            <strong>{device.waterLevel.toFixed(1)} см</strong> 
           </div>
         </div>
         
@@ -74,18 +73,17 @@ const FieldCard = ({ device }) => {
           {device.condition}
         </div>
         
-        {/* Нова кнопка команди */}
         <button 
           onClick={handleSendCommand} 
           className="command-button"
-          disabled={device.status !== 'Online'} // Блокуємо, якщо офлайн
+          disabled={device.status !== 'Online' || device.deviceGroup === 'unknown_group'}
         >
           Надіслати команду
         </button>
         
         <div className="update-time">
           <StatusIndicator status={device.status} />
-          Оновлено: {device.lastUpdated.toLocaleTimeString('uk-UA')}
+          Оновлено: {new Date(device.lastUpdated).toLocaleTimeString('uk-UA')}
         </div>
       </div>
     </div>

@@ -1,22 +1,23 @@
 import { useDataSimulation } from './hooks/useDataSimulation';
 import Dashboard from './components/Dashboard';
 import RiskMapView from './components/RiskMapView';
+import DeviceDetailModal from './components/DeviceDetailModal'; 
 
 function App() {
-  // Запускаємо хук симуляції
-  // Він сам завантажить дані та запустить оновлення
-  // 10000 мс = 10 секунд, як у завданні
-  useDataSimulation(10000); 
+  useDataSimulation(10000); // 10 секунд
 
   return (
     <div className="app-container">
       <header className="app-header">
-        <h1>🚜 Моніторинг Стану Полів</h1>
+        <h1>🚜 Моніторинг Стану Полів (MVP)</h1>
         <p>Панель для операторів транспорту</p>
       </header>
       <main>
-        <Dashboard />
+        <Dashboard /> 
         <RiskMapView />
+        
+        {/* Компонент модального вікна (сам вирішує, коли бути видимим) */}
+        <DeviceDetailModal /> 
       </main>
     </div>
   );

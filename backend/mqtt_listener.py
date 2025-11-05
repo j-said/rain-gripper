@@ -1,13 +1,14 @@
 import paho.mqtt.client as paho
+import datetime
 import logging
-import sys
 import json
+import sys
 
 # Importing configuration and database modules
 from config import settings
 from database import get_db_session, SensorData
 
-SUBSCRIBE_TOPIC = "clients/#"
+SUBSCRIBE_TOPIC = "#"
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 log = logging.getLogger(__name__)
@@ -29,44 +30,55 @@ def on_message(client, userdata, msg):
     """
     try:
         topic = msg.topic
-        payload_str = msg.payload.decode("utf-8")
 
-        # Очікувана структура: clients/{cust_id}/{sub_device_id}/{data_type}
+        # Очікувана структура: {user_id}/{device_group}/{data_type}
+        # (e.g. c123/groupA/sensor_data/{"{device_id: UUID}": {"humidity": 45.6 etc., }, ...})
         parts = topic.split("/")
-        if len(parts) != 4 or parts[0] != "clients":
+        if (
+            len(parts) != 3
+            or parts[2]
+            == "command"  # костиль, щоб не заносило команди в БД з поламаного POST api, далі замінити на матч кейс
+        ):
             log.warning(f"Невідомий формат топіка: {topic}")
             return
 
-        customer_id = parts[1]
-        sub_device_id = parts[2]
-        data_type = parts[3]
+        user_id = parts[0]
+        device_group = parts[1]
+        data_type = parts[2]
 
-        # Парсинг payload
+        unwraped_message = msg.payload.decode("utf-8")
         try:
-            payload_json = json.loads(payload_str)
+            data = json.loads(unwraped_message)
         except json.JSONDecodeError:
-            log.error(f"Не вдалося розпарсити JSON з: {payload_str}")
+            log.error(f"Не вдалося розпарсити JSON з топіка {topic}")
             return
 
-        # Використовуємо context manager для безпечної сесії
         with get_db_session() as db:
+            records_to_add = []
 
-            db_record = SensorData(
-                customer_id=customer_id,
-                sub_device_id=sub_device_id,
-                data_type=data_type,
-                payload=payload_json,  # Зберігаємо payload як JSONB
-            )
+            for key, value in data.items():
+                device_id = key
+                payload_json = value
 
-            db.add(db_record)
-            db.commit()
+                db_record = SensorData(
+                    owner_user_id=user_id,
+                    device_id=device_id,
+                    payload=payload_json,
+                    timestamp=datetime.datetime.now(datetime.UTC), # current UTC timestamp
+                )
+                records_to_add.append(db_record)
 
-            log.info(
-                f"Збережено: {customer_id}/{data_type}"
-            )  # (Опціонально, для debug)
+            if records_to_add:
+                db.add_all(records_to_add)
+                db.commit()
+                log.info(f"Збережено {len(records_to_add)} записів з топіка {topic}")
+            else:
+                log.warning(f"Отримано порожнє повідомлення з {topic}")
 
     except Exception as e:
-        log.error(f"Помилка в on_message: {e}. Топік: {msg.topic}")
+        log.error(
+            f"Критична помилка в on_message: {e}. Топік: {msg.topic}", exc_info=True
+        )
 
 
 if __name__ == "__main__":

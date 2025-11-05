@@ -1,24 +1,19 @@
 import { useEffect } from 'react';
 import { useDeviceStore } from '../store/deviceStore';
 
-// Цей хук запускає початкове завантаження
-// і встановлює інтервал для оновлення даних
 export const useDataSimulation = (intervalMs = 10000) => {
-  // Витягуємо дії зі стору (стабільний метод)
-  const fetchDevices = useDeviceStore((state) => state.fetchDevices);
+  // Використовуємо правильні назви функцій
+  const fetchSensorData = useDeviceStore((state) => state.fetchSensorData);
   const updateDeviceData = useDeviceStore((state) => state.updateDeviceData);
 
   useEffect(() => {
-    // 1. Завантажуємо дані 1 раз при старті
-    fetchDevices();
+    fetchSensorData(); // Початкове завантаження
 
-    // 2. Встановлюємо інтервал для оновлення
     const intervalId = setInterval(() => {
-      updateDeviceData();
+      updateDeviceData(); // Оновлення кожні 10 сек
     }, intervalMs);
 
-    // 3. Прибираємо інтервал при демонтажі
     return () => clearInterval(intervalId);
     
-  }, [fetchDevices, updateDeviceData, intervalMs]);
+  }, [fetchSensorData, updateDeviceData, intervalMs]);
 };

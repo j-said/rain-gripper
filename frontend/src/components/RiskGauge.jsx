@@ -9,7 +9,6 @@ const RiskGauge = ({ score }) => {
   };
 
   const color = getScoreColor(score);
-  // Магія CSS: 3.6 - це 360 градусів / 100 очок
   const gradient = `conic-gradient(${color} ${score * 3.6}deg, #34495e 0deg)`;
 
   return (

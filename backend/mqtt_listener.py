@@ -25,6 +25,7 @@ def on_connect(client, userdata, flags, reason_code, properties=None):
 
 
 def on_message(client, userdata, msg):
+    log.info(f'{msg.payload.decode("utf-8")}')
     """
     Callback: Парсинг повідомлення та запис у PostgreSQL.
     """

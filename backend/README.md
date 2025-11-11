@@ -1,126 +1,110 @@
-# RainGripper IoT Backend
+# RainGripper IoT Backend (v0.2.0)
 
-This is a backend service for the RainGripper project. Built on an asynchronous architecture that separates data ingestion (MQTT) from API serving (FastAPI).
+Це бекенд-сервіс для проекту RainGripper, побудований на асинхронній архітектурі, яка розділяє прийом даних (MQTT) та обслуговування API (FastAPI) з автентифікацією.
 
-## Architecture Overview
+## Архітектура (Оновлено)
 
-- Data ingestion: `mqtt_connect.py` listens to MQTT topics, parses JSON payloads from devices and writes data to PostgreSQL.
-- API serving: `main.py` runs FastAPI REST API for the web portal (data retrieval, user/device management) and sends commands to devices via MQTT.
+- **Прийом даних**: `mqtt_listener.py` слухає MQTT-топіки (#), використовує кеш в пам'яті (LOOKUP_CACHE) для миттєвого мапінгу (user_id, group_name, local_id) у device_pk і записує дані в PostgreSQL.
 
-## Services
+- **API**: `main.py` запускає FastAPI REST API. Усі ендпоінти (окрім `/token` та `/users/`) захищені за допомогою JWT-токенів.
 
-1. MQTT Listener (`mqtt_connect.py`)
-  - Separate Python process
-  - Connects to MQTT broker with persistent connection
-  - Subscribes to data topics (e.g., `+/+/data`)
-  - Parses JSON messages and writes data to SensorData table via `database.py` and `get_db_session`
-  - Uses bulk inserts (`add_all` / `commit`) for performance
+- **Інвалідaція кешу**: API (`main.py`) публікує повідомлення в `system/cache/invalidate/{user_id}`, коли дані (групи, пристрої) змінюються, змушуючи `mqtt_listener` оновити свій кеш.
 
-2. FastAPI Server (`main.py`)
-  - Runs webserver (Uvicorn)
-  - REST endpoints for CRUD: Users, DeviceGroups, Devices, and sensor data retrieval
-  - Validation through Pydantic (`schemas.py`)
-  - Resilient MQTT client for command publishing (`mqtt_publisher.py`) managed via FastAPI lifespan
-  - API endpoints use `mqtt_publisher.publish()` for immediate command sending
+## Сервіси
 
-## Project Structure
+### MQTT Listener (`mqtt_listener.py`)
+
+- Підписується на `#`.
+- Обробляє `system/cache/invalidate` для оновлення `LOOKUP_CACHE`.
+- Обробляє `{user_id}/{local_group}/data` для запису даних.
+- Використовує `LOOKUP_CACHE` для уникнення запитів до БД при прийомі повідомлень.
+
+### FastAPI Server (`main.py`)
+
+- Захищені ендпоінти (JWT).
+- Ендпоінт `/token` для отримання токенів.
+- Публікує команди в `{user_id}/{local_group}/command`.
+
+## Структура проекту
 
 ```
 /
-├── main.py             # FastAPI server (endpoints, lifespan)
-├── mqtt_connect.py     # MQTT Listener (data ingestion service)
-├── mqtt_client.py      # MQTT Client (for FastAPI publisher)
-├── mqtt_publisher.py   # Command publishing logic
-├── crud.py            # Database query logic (SELECT, INSERT...)
-├── database.py        # SQLAlchemy models and DB connection
-├── schemas.py         # Pydantic models (API validation)
-├── config.py          # Load settings from .env
-├── requirements.txt   # Python dependencies
-├── seed_db.py         # (Optional) Database seeding script
-└── .env.example       # Example settings file
+├── main.py             # FastAPI (захищені ендпоінти, JWT)
+├── mqtt_listener.py    # MQTT Listener (прийом даних + кешування)
+├── mqtt_publisher.py   # Логіка публікації команд
+├── crud.py             # Логіка запитів до БД (з хешуванням паролів)
+├── database.py         # Моделі SQLAlchemy (BigInteger ID, MAC)
+├── schemas.py          # Моделі Pydantic (з local_id, mac_address)
+├── config.py           # Завантаження .env (включно з SECRET_KEY)
+├── requirements.txt    # Залежності (включно з passlib, python-jose)
+├── seed-db.py          # Оновлений скрипт заповнення БД
+└── .env.example        # Приклад налаштувань (з SECRET_KEY)
 ```
 
-## Requirements
+## Встановлення
 
-- Python 3.10+
-- PostgreSQL server
-- Ubuntu (for apt examples)
+(Кроки 1-3 залишаються ті ж самі...)
 
-## Installation (Ubuntu)
+1. Створіть `.env` (додайте `SECRET_KEY`):
+  ```bash
+  # Згенеруйте ключ
+  openssl rand -hex 32
+  ```
 
-1. Install dependencies:
-```bash
-# Update and install PostgreSQL client
-sudo apt update
-sudo apt install postgresql-client libpq-dev
+2. Скопіюйте ключ у ваш `.env` файл:
+  ```
+  DB_USER=...
+  DB_PASSWORD=...
+  ...
+  MQTT_BROKER=...
+  SECRET_KEY=e8b28f... (ваш ключ)
+  ```
 
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
+3. Створіть таблиці:
+  ```bash
+  python database.py
+  ```
 
-# Install requirements
-pip install -r requirements.txt
-```
+4. (Опційно) Заповніть БД тестовими даними:
+  ```bash
+  python seed-db.py
+  ```
+  Це створить юзера: `test@example.com`
+  Пароль: `password123`
 
-2. Configure database:
-```sql
-CREATE USER my_user WITH PASSWORD 'my_password';
-CREATE DATABASE raingripper_db;
-GRANT ALL PRIVILEGES ON DATABASE raingripper_db TO my_user;
-\c raingripper_db
-GRANT USAGE ON SCHEMA public TO my_user;
-GRANT CREATE ON SCHEMA public TO my_user;
-```
+5. Запустіть сервіси:
+  ```bash
+  # Термінал 1 - MQTT Listener
+  python mqtt_listener.py
 
-3. Setup project:
-```bash
-# Create .env from example
-cp .env.example .env
+  # Термінал 2 - FastAPI Server
+  uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+  ```
 
-# Edit .env
-nano .env
-```
+## API (Оновлено)
 
-4. Create tables:
-```bash
-python database.py
-```
+Документація (Swagger) доступна тут: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
-5. (Optional) Seed database:
-```bash
-python seed_db.py
-```
+### Автентифікація
 
-6. Run services:
-```bash
-# Terminal 1 - MQTT Listener
-python mqtt_connect.py
+- **POST /token** - (Public) Отримати JWT токен. Надішліть `username` (це ваш email) та `password` у `application/x-www-form-urlencoded`.
 
-# Terminal 2 - FastAPI Server
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
+### Користувачі
 
-## API Documentation
+- **POST /api/v1/users/** - (Public) Створити нового користувача.
+- **GET /api/v1/users/me** - (Protected) Отримати дані поточного користувача.
 
-Interactive API documentation (Swagger) available at:
-http://127.0.0.1:8000/docs
+### Групи пристроїв
 
-### User Management
-- `POST /api/v1/users/` - Create new user
-- `GET /api/v1/users/` - List users
-- `GET /api/v1/users/{user_id}` - Get specific user
+- **POST /api/v1/groups/** - (Protected) Створити нову групу.
+- **GET /api/v1/groups/** - (Protected) Отримати список груп.
 
-### Device Group Management
-- `POST /api/v1/users/{user_id}/groups/` - Create group for user
-- `GET /api/v1/users/{user_id}/groups/` - Get user's groups
+### Пристрої
 
-### Device Management
-- `POST /api/v1/groups/{group_id}/devices/` - Create device in group
-- `GET /api/v1/groups/{group_id}/devices/` - Get group's devices
-- `GET /api/v1/users/{user_id}/devices/` - Get all user's devices
+- **POST /api/v1/groups/{group_id}/devices/** - (Protected) Створити пристрій у групі.
+- **GET /api/v1/groups/{group_id}/devices/** - (Protected) Отримати список пристроїв у групі.
 
-### Sensor Data Retrieval
-- `GET /api/v1/data/{user_id}` - Get sensor logs with optional date range filters
+### Дані та Команди
 
-### Command Sending
-- `POST /api/v1/command/{user_id}/{device_group}` - Send command to device group via MQTT
+- **GET /api/v1/data/** - (Protected) Отримати дані сенсорів.
+- **POST /api/v1/command/{device_group_local_name}** - (Protected) Надіслати команду.

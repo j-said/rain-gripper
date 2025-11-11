@@ -26,9 +26,11 @@ class Settings(BaseSettings):
         return f"postgresql+psycopg2://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     MQTT_BROKER: str = ""
-    MQTT_PORT: int = 8883
+    MQTT_PORT: int = 1883
     MQTT_USERNAME: str | None = None
     MQTT_PASSWORD: str | None = None
+
+    SECRET_KEY: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

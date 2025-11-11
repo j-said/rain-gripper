@@ -1,13 +1,30 @@
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
+from passlib.context import CryptContext
+from jose import jwt, JWTError
 
 # SQLAlchemy
 from database import SensorData, User, Device, DeviceGroup
 import schemas
+from config import settings
 
 log = logging.getLogger(__name__)
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+ALGORITHM = "HS256"
+# Використовуємо SECRET_KEY з .env
+SECRET_KEY = settings.SECRET_KEY
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
 
 
 # --- User ---
@@ -19,25 +36,45 @@ def get_user_by_email(db: Session, email: str):
     return db.query(User).filter(User.email == email).first()
 
 
-def get_users(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(User).offset(skip).limit(limit).all()
-
-
 def create_user(db: Session, user: schemas.UserCreate):
-    # УВАГА: Тут має бути реальне хешування паролю!
-    # Зараз просто імітація:
-    fake_hashed_password = user.password + "_hashed"
-
+    hashed_password = get_password_hash(user.password)
     db_user = User(
         username=user.username,
         email=user.email,
         name=user.name,
-        hashed_password=fake_hashed_password,
+        hashed_password=hashed_password,
     )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
     return db_user
+
+
+# --- Функції автентифікації (для main.py) ---
+
+
+def authenticate_user(db: Session, email: str, password: str):
+    user = get_user_by_email(db, email=email)
+    if not user:
+        return False
+    if not verify_password(password, user.hashed_password):
+        return False
+    return user
+
+
+def create_access_token(data: dict, expires_delta: timedelta = 30):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    # Переконуємось, що user_id це рядок
+    if isinstance(to_encode.get("sub"), uuid.UUID):
+        to_encode["sub"] = str(to_encode["sub"])
+
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
 
 # --- DeviceGroup ---
@@ -56,7 +93,11 @@ def get_device_groups_by_user(
 def create_device_group(
     db: Session, group: schemas.DeviceGroupCreate, user_id: uuid.UUID
 ):
-    db_group = DeviceGroup(group_name=group.group_name, owner_user_id=user_id)
+    db_group = DeviceGroup(
+        display_name=group.display_name,
+        local_name=group.local_name,
+        owner_user_id=user_id,
+    )
     db.add(db_group)
     db.commit()
     db.refresh(db_group)
@@ -65,7 +106,10 @@ def create_device_group(
 
 # --- Device ---
 def get_devices_by_group(
-    db: Session, group_id: uuid.UUID, skip: int = 0, limit: int = 100
+    db: Session,
+    group_id: int,
+    skip: int = 0,
+    limit: int = 100,
 ):
     return (
         db.query(Device)
@@ -76,9 +120,13 @@ def get_devices_by_group(
     )
 
 
-def create_device(db: Session, device: schemas.DeviceCreate, group_id: uuid.UUID):
+def create_device(db: Session, device: schemas.DeviceCreate, group_id: int):
     db_device = Device(
-        device_name=device.device_name, model=device.model, group_id=group_id
+        device_name=device.device_name,
+        model=device.model,
+        group_id=group_id,
+        local_id=device.local_id,
+        mac_address=device.mac_address,
     )
     db.add(db_device)
     db.commit()
@@ -88,13 +136,15 @@ def create_device(db: Session, device: schemas.DeviceCreate, group_id: uuid.UUID
 
 # --- SensorData (Denormalized) ---
 def get_sensor_data(
-    db: Session, user_id: str, start_date: datetime, end_date: datetime
+    db: Session,
+    user_id: uuid.UUID,
+    start_date: datetime,
+    end_date: datetime,
 ):
     """
     Отримує дані, використовуючи швидку денормалізовану схему.
     """
     log.info(f"Запит даних для {user_id} з {start_date} по {end_date}")
-
     try:
         query = (
             db.query(SensorData)
@@ -106,7 +156,6 @@ def get_sensor_data(
             .order_by(SensorData.timestamp.asc())
         )
         return query.all()
-
     except Exception as e:
         log.error(f"Помилка запиту до БД: {e}")
         return []

@@ -7,7 +7,10 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, Depends, HTTPException, Query, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError  # ДОДАНО
+from jose import JWTError, jwt
 
 # Локальні імпорти
 import crud
@@ -19,12 +22,6 @@ from config import settings
 # Налаштовуємо логування
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
-
-try:
-    Base.metadata.create_all(bind=engine)
-    log.info("Перевірено/Створено таблиці БД.")
-except Exception as e:
-    log.error(f"Помилка під час create_all: {e}")
 
 
 @asynccontextmanager
@@ -39,7 +36,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="RainGripper IoT API",
     description="API для отримання даних з IoT пристроїв.",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -57,7 +54,9 @@ def get_db():
 
 
 def publish_mqtt_command(
-    user_id: str, device_group: str, command: schemas.CommandRequest
+    user_id: uuid.UUID,
+    device_group_local_name: str,
+    command: schemas.CommandRequest,
 ):
     """
     Публікує команду, використовуючи існуюче з'єднання.
@@ -68,10 +67,10 @@ def publish_mqtt_command(
             **(command.parameters or {}),
         }
         payload_str = json.dumps(payload_dict)
-        topic = f"{user_id}/{device_group}/command"
+        # ОНОВЛЕНО: Топік відповідає mqtt_listener
+        topic = f"{user_id}/{device_group_local_name}/command"
 
         log.info(f"Публікація у MQTT: Топік={topic}")
-
         result = mqtt_publisher.mqtt_client.publish(topic, payload_str, qos=1)
 
         if result.rc != 0:
@@ -85,10 +84,72 @@ def publish_mqtt_command(
         raise HTTPException(status_code=500, detail=f"Внутрішня помилка MQTT: {e}")
 
 
+# --- Логіка Автентифікації ---
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+def get_current_user(
+    db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)
+) -> User:
+    """
+    Отримує токен, валідує його та повертає об'єкт User з БД.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[crud.ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+        token_data = schemas.TokenData(user_id=user_id)
+    except JWTError:
+        raise credentials_exception
+
+    try:
+        user_uuid = uuid.UUID(token_data.user_id)
+    except ValueError:
+        raise credentials_exception
+
+    user = crud.get_user(db, user_id=user_uuid)
+    if user is None:
+        raise credentials_exception
+    return user
+
+
 @app.get("/")
 def read_root():
-    """Корінцевий ендпоінт для перевірки працездатності."""
     return {"status": "ok", "message": "Welcome to RainGripper API"}
+
+
+# --- Ендпоінти Автентифікації ---
+
+
+@app.post("/token", response_model=schemas.Token)
+def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+):
+    user = crud.authenticate_user(
+        db, email=form_data.username, password=form_data.password
+    )
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=crud.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = crud.create_access_token(
+        data={"sub": str(user.user_id)}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.get("/api/v1/users/me", response_model=schemas.User)
+def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 
 # --- Users ---
@@ -96,58 +157,61 @@ def read_root():
 
 @app.post(
     "/api/v1/users/", response_model=schemas.User, status_code=status.HTTP_201_CREATED
-)  # Create User (FUTURE)
+)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = crud.get_user_by_email(db, email=user.email)
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    return crud.create_user(db=db, user=user)
+    # ДОДАНО: Обробка помилки унікальності
+    try:
+        db_user = crud.get_user_by_email(db, email=user.email)
+        if db_user:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        return crud.create_user(db=db, user=user)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Email or username already exists")
 
 
-@app.get("/api/v1/users/", response_model=List[schemas.User])
-def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    users = crud.get_users(db, skip=skip, limit=limit)
-    return users
-
-
-@app.get("/api/v1/users/{user_id}", response_model=schemas.User)
-def read_user(user_id: uuid.UUID, db: Session = Depends(get_db)):
-    db_user = crud.get_user(db, user_id=user_id)
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return db_user
-
-
-# --- Device Groups ---
+# --- Device Groups (ЗАХИЩЕНО) ---
 
 
 @app.post(
-    "/api/v1/users/{user_id}/groups/",
+    "/api/v1/groups/",  # ОНОВЛЕНО: Ендпоінт
     response_model=schemas.DeviceGroup,
     status_code=status.HTTP_201_CREATED,
 )
 def create_device_group_for_user(
-    user_id: uuid.UUID, group: schemas.DeviceGroupCreate, db: Session = Depends(get_db)
+    group: schemas.DeviceGroupCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    db_user = crud.get_user(db, user_id=user_id)
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return crud.create_device_group(db=db, group=group, user_id=user_id)
+    user_id = current_user.user_id
+    try:
+        # ПУБЛІКАЦІЯ В MQTT ДЛЯ ОНОВЛЕННЯ КЕШУ
+        mqtt_publisher.mqtt_client.publish(f"system/cache/invalidate/{user_id}", "")
+
+        return crud.create_device_group(db=db, group=group, user_id=user_id)
+    except IntegrityError:  # ДОДАНО: Обробка помилки
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"Group with local_name '{group.local_name}' already exists for this user.",
+        )
 
 
-# GET user devices groups SASHA DO IT
-@app.get("/api/v1/users/{user_id}/groups/", response_model=List[schemas.DeviceGroup])
+@app.get(
+    "/api/v1/groups/", response_model=List[schemas.DeviceGroup]
+)  # ОНОВЛЕНО: Ендпоінт
 def read_user_device_groups(
-    user_id: uuid.UUID, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    db_user = crud.get_user(db, user_id=user_id)
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+    user_id = current_user.user_id
     groups = crud.get_device_groups_by_user(db, user_id=user_id, skip=skip, limit=limit)
     return groups
 
 
-# --- Devices ---
+# --- Devices (ЗАХИЩЕНО) ---
 
 
 @app.post(
@@ -156,35 +220,79 @@ def read_user_device_groups(
     status_code=status.HTTP_201_CREATED,
 )
 def create_device_for_group(
-    group_id: uuid.UUID, device: schemas.DeviceCreate, db: Session = Depends(get_db)
+    group_id: int,
+    device: schemas.DeviceCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    # TODO: Додати перевірку, чи group_id існує
-    return crud.create_device(db=db, device=device, group_id=group_id)
+    # Перевірка, чи належить група поточному юзеру
+    db_group = (
+        db.query(DeviceGroup)
+        .filter(
+            DeviceGroup.group_id == group_id,
+            DeviceGroup.owner_user_id == current_user.user_id,
+        )
+        .first()
+    )
+
+    if not db_group:
+        raise HTTPException(status_code=404, detail="Group not found or access denied")
+
+    try:
+        # ПУБЛІКАЦІЯ В MQTT ДЛЯ ОНОВЛЕННЯ КЕШУ
+        mqtt_publisher.mqtt_client.publish(
+            f"system/cache/invalidate/{current_user.user_id}", ""
+        )
+        return crud.create_device(db=db, device=device, group_id=group_id)
+
+    except IntegrityError as e:  # ДОДАНО: Обробка помилки
+        db.rollback()
+        detail = "Unknown integrity error"
+        if "uq_group_local_id" in str(e):
+            detail = (
+                f"Device with local_id {device.local_id} already exists in this group."
+            )
+        elif "uq_mac_address" in str(e):
+            detail = f"Device with MAC address {device.mac_address} already exists."
+        raise HTTPException(status_code=409, detail=detail)
 
 
-# GET rquest of devices in grops SASHA DO IT
 @app.get("/api/v1/groups/{group_id}/devices/", response_model=List[schemas.Device])
 def read_group_devices(
-    group_id: uuid.UUID, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
+    group_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    # TODO: Додати перевірку, чи group_id існує
+    # Перевірка, чи належить група поточному юзеру
+    db_group = (
+        db.query(DeviceGroup)
+        .filter(
+            DeviceGroup.group_id == group_id,
+            DeviceGroup.owner_user_id == current_user.user_id,
+        )
+        .first()
+    )
+
+    if not db_group:
+        raise HTTPException(status_code=404, detail="Group not found or access denied")
+
     devices = crud.get_devices_by_group(db, group_id=group_id, skip=skip, limit=limit)
     return devices
 
 
-# --- Sensor Data ---
+# --- Sensor Data (ЗАХИЩЕНО) ---
 
 
-@app.get("/api/v1/data/{user_id}", response_model=List[schemas.SensorDataResponse])
+@app.get("/api/v1/data/", response_model=List[schemas.SensorDataResponse])
 def get_data_slice(
-    user_id: str,
     db: Session = Depends(get_db),
-    start_date: datetime = Query(default=None),
-    end_date: datetime = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    start_date: datetime = Query(default=None, description="ISO 8601 format"),
+    end_date: datetime = Query(default=None, description="ISO 8601 format"),
 ):
-    """
-    Отримує зріз даних для клієнта за вказаний період.
-    """
+    user_id = current_user.user_id
     if end_date is None:
         end_date = datetime.now(timezone.utc)
     if start_date is None:
@@ -200,27 +308,37 @@ def get_data_slice(
         raise HTTPException(status_code=500, detail="Внутрішня помилка сервера")
 
 
-# --- Commands (MQTT) ---
+# --- Commands (MQTT) (ЗАХИЩЕНО) ---
 
 
 @app.post(
-    "/api/v1/command/{user_id}/{device_group}", status_code=status.HTTP_202_ACCEPTED
+    "/api/v1/command/{device_group_local_name}", status_code=status.HTTP_202_ACCEPTED
 )
 def send_command_to_device(
-    user_id: str,
-    device_group: str,  # (напр. 'Main Garden' або 'all')
+    device_group_local_name: str,  # 'a', 'b', 'c'
     command: schemas.CommandRequest,
+    current_user: User = Depends(get_current_user),  # ЗАХИЩЕНО
+    db: Session = Depends(get_db),
 ):
     """
-    Надсилає команду на конкретну групу пристроїв
-    через MQTT.
+    Надсилає команду на конкретну групу пристроїв ('local_name')
     """
-    log.info(f"Отримано API запит на команду для {user_id}/{device_group}")
+    db_found = (
+        db.query(DeviceGroup)
+        .filter(
+            DeviceGroup.local_name == device_group_local_name,
+            DeviceGroup.owner_user_id == current_user.user_id,
+        )
+        .first()
+    )
 
-    # Передаємо роботу MQTT-паблішеру
-    # (Ця функція викличе HTTPException у разі помилки)
-    publish_mqtt_command(user_id, device_group, command)
+    if not db_found:
+        raise HTTPException(status_code=404, detail="Group not found or access denied")
 
+    log.info(
+        f"Отримано API запит на команду для {db_found.user_id}/{device_group_local_name}"
+    )
+    publish_mqtt_command(db_found.user_id, device_group_local_name, command)
     return {
         "status": "accepted",
         "message": f"Команду '{command.action}' надіслано у топік.",

@@ -1,9 +1,11 @@
+import logging
 from contextlib import contextmanager
 from datetime import datetime
 
 from sqlalchemy.dialects.postgresql import (
     UUID,
     JSONB,
+    MACADDR,
 )
 from sqlalchemy.orm import (
     declarative_base,
@@ -20,11 +22,13 @@ from sqlalchemy import (
     TIMESTAMP,
     BigInteger,
     Index,
+    UniqueConstraint,
+    SmallInteger,
+    CheckConstraint,
 )
 
 # Local imports
 from config import settings
-import logging
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +48,7 @@ Base = declarative_base()
 def get_db_session():
     """
     Безпечний менеджер контексту для отримання сесії БД.
-    Використовується у mqtt_listener.py
+    ВикористоVється у mqtt_listener.py
     """
     db = SessionLocal()
     try:
@@ -91,21 +95,22 @@ class User(Base):
     device_groups = relationship(
         "DeviceGroup", back_populates="owner", cascade="all, delete"
     )
+    # ORM Зв'язок: "Я володію багатьма токенами"
+    api_tokens = relationship("APIToken", back_populates="owner", cascade="all, delete")
 
 
 class DeviceGroup(Base):
     __tablename__ = "device_groups"
 
-    group_id = Column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
+    group_id = Column(BigInteger, Identity(), primary_key=True)
     owner_user_id = Column(
         UUID(as_uuid=True),
         ForeignKey("users.user_id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    group_name = Column(String(100), nullable=False)
+    local_name = Column(String(10), nullable=False) # Ім'я в системі
+    display_name = Column(String(100), nullable=False) # Ім'я для користувача
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
@@ -114,22 +119,26 @@ class DeviceGroup(Base):
     owner = relationship("User", back_populates="device_groups")
     devices = relationship("Device", back_populates="group", cascade="all, delete")
 
-    __table_args__ = (Index("idx_device_groups_owner", owner_user_id),)
+    __table_args__ = (
+        # Гарантує, що 'local_name' ('a', 'b') унікальний *для одного юзера*
+        UniqueConstraint("owner_user_id", "local_name", name="uq_user_local_name"),
+    )
 
 
 class Device(Base):
     __tablename__ = "devices"
 
-    device_id = Column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
+    device_id = Column(BigInteger, Identity(), primary_key=True)
     group_id = Column(
-        UUID(as_uuid=True),
+        BigInteger,
         ForeignKey("device_groups.group_id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    device_name = Column(String(100), nullable=False)
+    mac_address = Column(MACADDR, nullable=False, index=True)
+    local_id = Column(SmallInteger, nullable=False)
+
+    device_name = Column(String(100), nullable=False)  # аналогічно до DeviceGroup
     model = Column(String(100))
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
@@ -141,7 +150,14 @@ class Device(Base):
         "SensorData", back_populates="device", cascade="all, delete"
     )
 
-    __table_args__ = (Index("idx_devices_group", group_id),)
+    __table_args__ = (
+        # Гарантує, що 'local_id' (1, 2, 3...) унікальний *в межах однієї групи*
+        UniqueConstraint("group_id", "local_id", name="uq_group_local_id"),
+        # Гарантує, що MAC унікальний у всій системі
+        UniqueConstraint("mac_address", name="uq_mac_address"),
+        # Обмеження 1-255
+        CheckConstraint("local_id >= 1 AND local_id <= 255", name="chk_local_id_range"),
+    )
 
 
 class SensorData(Base):
@@ -150,13 +166,12 @@ class SensorData(Base):
     id = Column(BigInteger, Identity(), primary_key=True)
     timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
     device_id = Column(
-        UUID(as_uuid=True),
+        BigInteger,
         ForeignKey("devices.device_id", ondelete="CASCADE"),
         nullable=False,
     )
-
-    # --- ДЕНОРМАЛІЗОВАНА КОЛОНКА ---
-    # Ми дублюємо owner_user_id тут при записі даних
+ 
+    # ДЕНОРМАЛІЗОВАНА КОЛОНКА вона потрібна для швидких запитів з API
     owner_user_id = Column(
         UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False, index=True
     )
@@ -168,11 +183,31 @@ class SensorData(Base):
     __table_args__ = (
         # Індекс для запиту по користувачу та часу
         Index("idx_sensor_data_user_time", owner_user_id, timestamp.desc()),
-        # Індекс  для запитів по конкретному пристрою та часу
+        # Індекс для запитів по конкретному пристрою та часу
         Index("idx_sensor_data_device_time", device_id, timestamp.desc()),
         # GIN індекс для JSONB
         Index("idx_sensor_data_payload", payload, postgresql_using="gin"),
     )
+
+
+class APIToken(Base):
+    __tablename__ = "api_tokens"
+
+    token_id = Column(BigInteger, Identity(), primary_key=True)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash = Column(String(255), nullable=False, unique=True, index=True)
+    expires_at = Column(TIMESTAMP(timezone=True), nullable=False)
+    created_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    # ORM Зв'язок
+    owner = relationship("User", back_populates="api_tokens")
 
 
 if __name__ == "__main__":

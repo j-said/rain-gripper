@@ -1,0 +1,199 @@
+menu "Application Configuration"
+    config MODE_STRAPPING_GPIO
+        int "Device mode (main/edge) strapping GPIO number"
+        default 34
+        help
+            GPIO number for device mode configuration
+endmenu
+
+menu "Sensor Configuration"
+    config DHT22_GPIO
+            int "GPIO number for DHT22 sensor"
+            default 5
+            help
+                GPIO number for DHT22 sensor
+                
+    config DS18B20_GPIO
+        int "GPIO number for DS18B20 temperature sensor"
+        default 2
+        help
+            GPIO number for DS18B20 temperature sensor
+
+    config ADC_UNIT
+        int "ADC unit for HD38 humidity and raindrop sensors"
+        range 1 2
+        default 1
+        help
+            ADC unit for HD38 humidity and raindrop sensors
+
+    config HD38_ADC_CHANNEL
+        int "ADC channel for HD38 humidity sensor"
+        range 0 9
+        default 0
+        help
+            ADC channel for HD38 humidity sensor
+
+    config RAINDROP_ADC_CHANNEL
+        int "ADC channel for raindrop sensor"
+        range 0 9
+        default 3
+        help
+            ADC channel for raindrop sensor
+
+    config RAINDROP_GPIO
+        int "GPIO number for raindrop sensor"
+        default 35
+        help
+            GPIO numberl for raindrop sensor
+endmenu
+
+menu "LoRa SX127x configuraton"
+    config LORA_SCK
+        int "SCK"
+        default 14
+        help
+            GPIO number for SPI SCK
+
+    config LORA_MISO
+        int "MISO"
+        default 12
+        help
+            GPIO number for SPI MISO 
+
+    config LORA_MOSI
+        int "MOSI"
+        default 13
+        help
+            GPIO number for SPI MOSI 
+      
+    config LORA_SS
+        int "SS"
+        default 15
+        help
+            GPIO number for SPI SS
+
+    config LORA_RST
+        int "RST"
+        default 27
+        help
+            GPIO number for LoRa RST
+
+    config LORA_DIO0
+        int "DIO0"
+        default 26
+        help
+            GPIO number for LoRa DIO0                       
+endmenu     
+
+menu "SoftAP Configuration"
+
+    config ESP_WIFI_SSID
+        string "WiFi SSID"
+        default "myssid"
+        help
+            SSID (network name) for the example to connect to.
+
+    config ESP_WIFI_PASSWORD
+        string "WiFi Password"
+        default "mypassword"
+        help
+            WiFi password (WPA or WPA2) for the example to use.
+    config ESP_WIFI_CHANNEL
+        int "WiFi Channel"
+        range 1 13
+        default 1
+        help
+            WiFi channel (network channel) for the example to use.
+
+    config ESP_MAX_STA_CONN
+        int "Maximal STA connections"
+        default 4
+        help
+            Max number of the STA connects to AP.
+endmenu
+
+menu "GSM Modem Configuration"
+    choice EXAMPLE_FLOW_CONTROL
+        bool "Set preferred modem control flow"
+        default EXAMPLE_FLOW_CONTROL_NONE
+        help
+            Set the modem's preferred control flow
+
+        config EXAMPLE_FLOW_CONTROL_NONE
+            bool "No control flow"
+        config EXAMPLE_FLOW_CONTROL_SW
+            bool "SW control flow"
+        config EXAMPLE_FLOW_CONTROL_HW
+            bool "HW control flow"
+    endchoice
+
+    config EXAMPLE_MODEM_UART_TX_PIN
+        int "TXD Pin Number"
+        default 17
+        range 0 56
+        help
+            Pin number of UART TX.
+
+    config EXAMPLE_MODEM_UART_RX_PIN
+        int "RXD Pin Number"
+        default 16
+        range 0 56
+        help
+            Pin number of UART RX.
+
+    config EXAMPLE_MODEM_UART_RTS_PIN
+        int "RTS Pin Number"
+        default 25
+        range 0 56
+        help
+            Pin number of UART RTS.
+
+    config EXAMPLE_MODEM_UART_CTS_PIN
+        int "CTS Pin Number"
+        default 26
+        range 0 56
+        help
+            Pin number of UART CTS.
+
+    config EXAMPLE_MODEM_UART_EVENT_TASK_STACK_SIZE
+        int "UART Event Task Stack Size"
+        range 2000 6000
+        default 4096
+        help
+            Stack size of UART event task.
+
+    config EXAMPLE_MODEM_UART_EVENT_TASK_PRIORITY
+        int "UART Event Task Priority"
+        range 3 22
+        default 5
+        help
+            Priority of UART event task.
+
+    config EXAMPLE_MODEM_UART_EVENT_QUEUE_SIZE
+        int "UART Event Queue Size"
+        range 10 40
+        default 30
+        help
+            Length of UART event queue.
+
+    config EXAMPLE_MODEM_UART_PATTERN_QUEUE_SIZE
+        int "UART Pattern Queue Size"
+        range 10 40
+        default 20
+        help
+            Length of UART pattern queue.
+
+    config EXAMPLE_MODEM_UART_TX_BUFFER_SIZE
+        int "UART TX Buffer Size"
+        range 256 2048
+        default 512
+        help
+            Buffer size of UART TX buffer.
+
+    config EXAMPLE_MODEM_UART_RX_BUFFER_SIZE
+        int "UART RX Buffer Size"
+        range 256 2048
+        default 1024
+        help
+            Buffer size of UART RX buffer.
+endmenu

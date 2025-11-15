@@ -1,0 +1,119 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+<title>Rain Gripper Web Server</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+  <style>
+    html {font-family: Arial; display: inline-block; text-align: center;}
+    p { font-size: 1.2rem; }
+    body { margin: 0; }
+    .topnav { overflow: hidden; background-color: #241d4b; color: white; font-size: 1.7rem; }
+    .content { padding: 20px; }
+    .card { 
+      background-color: white; 
+      box-shadow: 2px 2px 12px 1px rgba(140,140,140,.5); 
+      padding: 20px; 
+      text-align: left; 
+    }
+    .card h4 { 
+      text-align: center; 
+      margin-top: 0; 
+    }
+    .cards { 
+      max-width: 700px; 
+      margin: 0 auto; 
+      display: grid; 
+      grid-gap: 2rem; 
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+    }
+    .reading { font-size: 2.8rem; }
+    .card.main { color: #0f3566; }
+    .card.edge { color: #0e7c7b; }
+    .card ul { 
+      padding-left: 0; 
+      margin: 0; 
+      list-style: none; 
+    }
+  </style>
+</head>
+<body>
+  <div class="topnav">
+    <h3>RAIN GRIPPER</h3>
+  </div>
+  <div class="content">
+    <div class="cards">
+        <div class="card main">
+            <h4>MAIN LOCATION</h4>
+            <p><span class="reading">
+                <ul>
+                    <li id="main-rainfall">Rainfall:</li>
+                    <li id="main-rain">Rain:</li>
+                    <li id="main-air-temp">Air temperature:</li>
+                    <li id="main-air-humidity">Air humidity:</li>
+                    <li id="main-soil-temp">Soil temperature:</li>
+                    <li id="main-soil-humidity">Soil humidity:</li>
+              </ul>
+            </span></p>
+        </div>
+        <div class="card edge">
+            <h4>EDGE LOCATION</h4>
+            <p><span class="reading">
+                <ul>
+                    <li id="edge-rainfall">Rainfall:</li>
+                    <li id="edge-rain">Rain:</li>
+                    <li id="edge-air-temp">Air temperature:</li>
+                    <li id="edge-air-humidity">Air humidity:</li>
+                    <li id="edge-soil-temp">Soil temperature:</li>
+                    <li id="edge-soil-humidity">Soil humidity:</li>
+              </ul>
+            </span></p>
+        </div>
+    </div>
+  </div>
+  <script>
+    var gateway = `ws://${window.location.hostname}/ws`;
+    var websocket;
+    window.addEventListener('load', onLoad);
+    function initWebSocket() {
+        console.log('Trying to open a WebSocket connection...');
+        websocket = new WebSocket(gateway);
+        websocket.onopen = onOpen;
+        websocket.onclose = onClose;
+        websocket.onmessage = onMessage;
+    }
+    function onOpen(event) {
+        console.log('Connection opened');
+    }
+    function onClose(event) {
+        console.log('Connection closed');
+        setTimeout(initWebSocket, 2000);
+    }
+    function onMessage(event) {
+        console.log('Message received:', event.data);
+        // Split the message into lines
+        const lines = event.data.split('\n');
+
+        // Iterate through each line
+        lines.forEach(line => {
+            // Split each line into "id" and "innerHTML"
+            const [id, innerHTML] = line.split('|');
+            if (id && innerHTML) {
+                // Find the element by ID and update its innerHTML
+                const element = document.getElementById(id.trim());
+                if (element) {
+                    element.innerHTML = innerHTML.trim();
+                } else {
+                    console.warn(`Element with id "${id}" not found.`);
+                }
+            }
+        });
+    }
+    function onLoad(event) {
+        initWebSocket();
+    }
+
+</script>  
+</body>
+</html>

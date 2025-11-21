@@ -1,32 +1,36 @@
 {
-  "name": "iot-dashboard-mvp",
+  "name": "raingripper-client",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
-    "leaflet": "1.9.4",
-    "package-lock.json": "^1.0.0",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "react-leaflet": "4.2.1",
-    "recharts": "2.12.7",
-    "zustand": "5.0.8"
+    "@tanstack/react-query": "^5.66.0",
+    "@turf/convex": "^7.2.0",
+    "@turf/helpers": "^7.2.0",
+    "axios": "^1.7.9",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.475.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-leaflet": "^5.0.0",
+    "react-router-dom": "^7.1.5",
+    "recharts": "^2.15.1",
+    "tailwind-merge": "^3.0.1",
+    "tailwindcss": "^4.0.6",
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
-    "@eslint/js": "9.36.0",
-    "@types/react": "18.3.3",
-    "@types/react-dom": "18.3.0",
-    "@vitejs/plugin-react": "5.0.4",
-    "eslint": "9.36.0",
-    "eslint-plugin-react-hooks": "5.2.0",
-    "eslint-plugin-react-refresh": "0.4.7",
-    "globals": "16.4.0",
-    "vite": "7.1.7"
+    "@tailwindcss/vite": "^4.0.6",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.1.0"
   }
 }

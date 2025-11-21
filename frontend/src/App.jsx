@@ -1,25 +1,20 @@
-import { useDataSimulation } from './hooks/useDataSimulation';
-import Dashboard from './components/Dashboard';
-import RiskMapView from './components/RiskMapView';
-import DeviceDetailModal from './components/DeviceDetailModal'; 
+import { Routes, Route, Navigate } from 'react-router-dom';
+import Login from './pages/Login';
+import ProtectedLayout from './components/ProtectedLayout';
+
+const Dashboard = () => <div className="text-center mt-20">Dashboard Coming Soon...</div>;
 
 function App() {
-  useDataSimulation(10000); // 10 секунд
-
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <h1>🚜 Моніторинг Стану Полів (MVP)</h1>
-        <p>Панель для операторів транспорту</p>
-      </header>
-      <main>
-        <Dashboard /> 
-        <RiskMapView />
-        
-        {/* Компонент модального вікна (сам вирішує, коли бути видимим) */}
-        <DeviceDetailModal /> 
-      </main>
-    </div>
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      
+      <Route element={<ProtectedLayout />}>
+        <Route path="/" element={<Dashboard />} />
+      </Route>
+      
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 

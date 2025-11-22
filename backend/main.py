@@ -124,6 +124,29 @@ def read_root():
     return {"status": "ok", "message": "Welcome to RainGripper API"}
 
 
+# --- ADMIN ENDPOINTS ---
+@app.post(
+    "/api/v1/admin/repository/",
+    response_model=schemas.DeviceRepositoryResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_device_to_repository(
+    device: schemas.DeviceRepositoryCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        get_current_user
+    ),  # In real app: check current_user.is_admin
+):
+    # TODO: Add check if current_user.email == "admin@example.com"
+    try:
+        return crud.create_repository_device(db=db, item=device)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="Device with this MAC already exists in repository"
+        )
+
+
 # --- Ендпоінти Автентифікації ---
 
 
@@ -245,6 +268,10 @@ def create_device_for_group(
         )
         return crud.create_device(db=db, device=device, group_id=group_id)
 
+    except ValueError as e:
+        # Catch our new validation errors (Invalid MAC or Already Taken)
+        raise HTTPException(status_code=400, detail=str(e))
+
     except IntegrityError as e:  # ДОДАНО: Обробка помилки
         db.rollback()
         detail = "Unknown integrity error"
@@ -317,7 +344,7 @@ def get_data_slice(
 def send_command_to_device(
     device_group_local_name: str,  # 'a', 'b', 'c'
     command: schemas.CommandRequest,
-    current_user: User = Depends(get_current_user),  # ЗАХИЩЕНО
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """

@@ -1,153 +1,214 @@
 import logging
 import uuid
+import random
 from datetime import datetime, timedelta, timezone
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
-from database import SessionLocal, Base, engine, create_all_tables
-from database import User, DeviceGroup, Device, SensorData
-from crud import get_password_hash  # Використовуємо той самий хешер, що й у crud
+import json
+
+from database import (
+    SessionLocal,
+    create_all_tables,
+    User,
+    DeviceGroup,
+    Device,
+    SensorData,
+    DeviceRepository,
+)
+from crud import get_password_hash
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-# --- Статичні ID для тестових даних ---
-TEST_USER_ID = uuid.UUID("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
-TEST_USER_EMAIL = "test@example.com"
-TEST_USER_PASS = "password123"
 
-# MAC-адреси для пристроїв
-MAC_1 = "00:1A:2B:3C:4D:5E"
-MAC_2 = "00:1A:2B:3C:4D:5F"
+def seed():
+    db = SessionLocal()
 
+    log.info("Creating tables if not exist...")
+    create_all_tables()
 
-def seed_data():
-    """
-    Заповнює базу даних актуальними даними (User, Group, Device, SensorData).
-    """
-    db: Session = SessionLocal()
+    users_data = [
+        ("test@example.com", "tester", "Test User"),
+        ("agronomist@example.com", "agro_bob", "Bob The Builder"),
+        ("manager@example.com", "manager_alice", "Alice Manager"),
+    ]
 
-    try:
-        existing_user = db.query(User).filter(User.email == TEST_USER_EMAIL).first()
+    created_users = {}
 
-        if existing_user:
-            log.warning(f"Користувач {TEST_USER_EMAIL} вже існує. Пропуск заповнення.")
-            db_user = existing_user
-        else:
-            log.info(f"Створення тестового користувача: {TEST_USER_EMAIL}")
-            hashed_password = get_password_hash(TEST_USER_PASS)  # Хешуємо пароль
-            db_user = User(
-                user_id=TEST_USER_ID,
-                username="testuser",
-                name="Test User",
-                email=TEST_USER_EMAIL,
-                hashed_password=hashed_password,
+    for email, username, name in users_data:
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            user = User(
+                username=username,
+                email=email,
+                name=name,
+                hashed_password=get_password_hash("password123"),
             )
-            db.add(db_user)
+            db.add(user)
             db.commit()
-            db.refresh(db_user)
-            log.info(f"Створено користувача. UUID: {db_user.user_id}")
-            log.info(f"Пароль для входу: {TEST_USER_PASS}")
+            db.refresh(user)
+            log.info(f"Created user: {email}")
+        created_users[email] = user
 
-        # --- Створення Групи 1 ('a') ---
-        group_a = (
-            db.query(DeviceGroup)
-            .filter(
-                DeviceGroup.owner_user_id == db_user.user_id,
-                DeviceGroup.local_name == "a",
-            )
-            .first()
+    main_user = created_users["test@example.com"]
+
+    # --- 3. HARDWARE REPOSITORY (Factory) ---
+    # We need:
+    # - Group 1: 2 devices
+    # - Group 2: 1 device
+    # - Unused: 5 devices
+    # Total needed: 8 devices. Let's create 10 to be safe and round numbers.
+
+    repo_devices = [
+        ("AA:00:00:00:00:01", "RainGripper Pro"),  # For Group 1
+        ("AA:00:00:00:00:02", "RainGripper Pro"),  # For Group 1
+        ("AA:00:00:00:00:03", "RainGripper Mini"),  # For Group 2
+        ("XX:00:00:00:00:01", "RainGripper Pro"),  # Unused 1
+        ("XX:00:00:00:00:02", "RainGripper Pro"),  # Unused 2
+        ("XX:00:00:00:00:03", "RainGripper Mini"),  # Unused 3
+        ("XX:00:00:00:00:04", "RainGripper Mini"),  # Unused 4
+        ("XX:00:00:00:00:05", "RainGripper X"),  # Unused 5
+    ]
+
+    for mac, model in repo_devices:
+        if not db.query(DeviceRepository).filter_by(mac_address=mac).first():
+            item = DeviceRepository(mac_address=mac, model=model)
+            db.add(item)
+    db.commit()
+    log.info(f"Hardware repository stocked with {len(repo_devices)} items.")
+
+    group_1 = (
+        db.query(DeviceGroup)
+        .filter_by(owner_user_id=main_user.user_id, local_name="a")
+        .first()
+    )
+    if not group_1:
+        group_1 = DeviceGroup(
+            owner_user_id=main_user.user_id,
+            local_name="a",
+            display_name="Alpha Fields (North)",
         )
+        db.add(group_1)
 
-        if not group_a:
-            log.info("Створення групи 'a' (Сад)")
-            group_a = DeviceGroup(
-                owner_user_id=db_user.user_id,
-                local_name="a",
-                display_name="Мій Головний Сад",
+    # Group 2: 1 device
+    group_2 = (
+        db.query(DeviceGroup)
+        .filter_by(owner_user_id=main_user.user_id, local_name="b")
+        .first()
+    )
+    if not group_2:
+        group_2 = DeviceGroup(
+            owner_user_id=main_user.user_id,
+            local_name="b",
+            display_name="Beta Greenhouse",
+        )
+        db.add(group_2)
+
+    # Group 3: Empty
+    group_3 = (
+        db.query(DeviceGroup)
+        .filter_by(owner_user_id=main_user.user_id, local_name="c")
+        .first()
+    )
+    if not group_3:
+        group_3 = DeviceGroup(
+            owner_user_id=main_user.user_id,
+            local_name="c",
+            display_name="Gamma Storage (Empty)",
+        )
+        db.add(group_3)
+
+    db.commit()
+    db.refresh(group_1)
+    db.refresh(group_2)
+    db.refresh(group_3)
+
+    assignments = [
+        # (Group Object, MAC, Local ID, Name)
+        (group_1, "AA:00:00:00:00:01", 1, "Sensor North-1"),
+        (group_1, "AA:00:00:00:00:02", 2, "Sensor North-2"),
+        (group_2, "AA:00:00:00:00:03", 1, "Greenhouse Main"),
+    ]
+
+    for grp, mac, local_id, name in assignments:
+        existing = db.query(Device).filter_by(mac_address=mac).first()
+        if not existing:
+            dev = Device(
+                group_id=grp.group_id,
+                mac_address=mac,
+                local_id=local_id,
+                device_name=name,
             )
-            db.add(group_a)
-            db.commit()
-            db.refresh(group_a)
+            db.add(dev)
+    db.commit()
+    log.info("Devices assigned to groups.")
 
-        # --- Створення Пристрою 1 (local_id 1) ---
-        dev_1 = db.query(Device).filter(Device.mac_address == MAC_1).first()
-        if not dev_1:
-            log.info("Створення пристрою 1 (local_id 1) у групі 'a'")
-            dev_1 = Device(
-                group_id=group_a.group_id,
-                mac_address=MAC_1,
-                local_id=1,
-                device_name="Датчик Вологості (Сад)",
-                model="RG-v2-hum",
+    log.info("Generating 7 days of sensor data...")
+
+    assigned_devices = (
+        db.query(Device)
+        .join(DeviceGroup)
+        .filter(DeviceGroup.owner_user_id == main_user.user_id)
+        .all()
+    )
+
+    now = datetime.now(timezone.utc)
+    data_buffer = []
+
+    group_locations = {
+        "a": (50.4500, 30.5200),  # Kyiv Center
+        "b": (50.4600, 30.5300),  # Slightly North-East
+    }
+
+    for dev in assigned_devices:
+        base_lat, base_lon = group_locations.get(dev.group.local_name, (50.0, 30.0))
+        dev_lat = base_lat + (dev.local_id * 0.002)
+        dev_lon = base_lon + (dev.local_id * 0.002)
+
+        # 7 Days * 24 Hours = 168 points
+        for hour in range(24 * 7):
+            time_point = now - timedelta(hours=hour)
+
+            # Simulate daily cycle (temperature drops at night)
+            hour_of_day = time_point.hour
+            is_day = 6 <= hour_of_day <= 20
+
+            temp_base = 20 if is_day else 15
+
+            payload = {
+                "water_level": round(40 + random.uniform(-5, 5), 1),
+                "air_temp": round(temp_base + random.uniform(-2, 2), 1),
+                "soil_temp": round(
+                    (temp_base - 2) + random.uniform(-0.5, 0.5), 1
+                ),  # Soil is more stable
+                "air_humidity": round(60 + random.uniform(-10, 10), 1),
+                "soil_humidity": round(50 + random.uniform(-2, 2), 1),
+                "latitude": dev_lat,
+                "longitude": dev_lon,
+                "battery": round(
+                    100 - (hour * 0.05), 1
+                ),  # Battery draining over the week
+            }
+
+            record = SensorData(
+                timestamp=time_point,
+                device_id=dev.device_id,
+                owner_user_id=main_user.user_id,
+                payload=json.dumps(payload),  # Storing as JSON String
             )
-            db.add(dev_1)
-            db.commit()
-            db.refresh(dev_1)
+            data_buffer.append(record)
 
-        # --- Створення Пристрою 2 (local_id 2) ---
-        dev_2 = db.query(Device).filter(Device.mac_address == MAC_2).first()
-        if not dev_2:
-            log.info("Створення пристрою 2 (local_id 2) у групі 'a'")
-            dev_2 = Device(
-                group_id=group_a.group_id,
-                mac_address=MAC_2,
-                local_id=2,
-                device_name="Датчик Температури (Сад)",
-                model="RG-v2-temp",
-            )
-            db.add(dev_2)
-            db.commit()
-            db.refresh(dev_2)
+            # Commit in chunks of 500 to avoid memory issues
+            if len(data_buffer) >= 500:
+                db.add_all(data_buffer)
+                db.commit()
+                data_buffer = []
 
-        # --- Генерація даних лише якщо їх немає ---
-        count = db.query(SensorData).count()
-        if count == 0:
-            log.info("Генерація 20 тестових записів SensorData...")
-            sensor_data_list = []
-            base_time = datetime.now(timezone.utc)
+    if data_buffer:
+        db.add_all(data_buffer)
+        db.commit()
 
-            for i in range(10):  # 10 записів для пристрою 1
-                record_time = base_time - timedelta(minutes=i * 10)
-                payload = {"humidity": 45.0 + (i * 1.5)}
-                data_record = SensorData(
-                    timestamp=record_time,
-                    device_id=dev_1.device_id,
-                    owner_user_id=db_user.user_id,
-                    payload=payload,
-                )
-                sensor_data_list.append(data_record)
-
-            for i in range(10):  # 10 записів для пристрою 2
-                record_time = base_time - timedelta(minutes=i * 10)
-                payload = {"temperature": 21.5 - (i * 0.1)}
-                data_record = SensorData(
-                    timestamp=record_time,
-                    device_id=dev_2.device_id,
-                    owner_user_id=db_user.user_id,
-                    payload=payload,
-                )
-                sensor_data_list.append(data_record)
-
-            db.add_all(sensor_data_list)
-            db.commit()
-            log.info("Тестові дані сенсорів додано.")
-        else:
-            log.info("Дані сенсорів вже існують. Пропуск генерації.")
-
-        log.info("Заповнення БД (seeding) успішно завершено.")
-
-    except IntegrityError as e:
-        log.warning(f"Помилка цілісності (можливо, дані вже існують): {e}")
-        db.rollback()
-    except Exception as e:
-        log.error(f"Помилка під час заповнення БД: {e}", exc_info=True)
-        db.rollback()
-    finally:
-        db.close()
+    log.info("Database seed complete.")
+    db.close()
 
 
 if __name__ == "__main__":
-    log.info("Запуск скрипта заповнення БД (seeding)...")
-    # Переконуємось, що таблиці існують
-    create_all_tables()
-    seed_data()
+    seed()

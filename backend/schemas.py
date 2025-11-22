@@ -1,7 +1,7 @@
 import uuid
 from pydantic import ConfigDict, BaseModel, Field, EmailStr
 from datetime import datetime
-from typing import List, Optional  # Додано
+from typing import List, Optional
 
 # --- Схеми Автентифікації ---
 
@@ -39,20 +39,20 @@ class User(BaseModel):
 
 
 class DeviceGroup(BaseModel):
-    group_id: int  # ЗМІНЕНО
+    group_id: int
     owner_user_id: uuid.UUID
-    local_name: str  # ДОДАНО
-    display_name: str  # ЗМІНЕНО
+    local_name: str
+    display_name: str
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class Device(BaseModel):
-    device_id: int  # ЗМІНЕНО
-    group_id: int  # ЗМІНЕНО
-    local_id: int  # ДОДАНО
-    mac_address: str  # ДОДАНО
+    device_id: int
+    group_id: int
+    local_id: int
+    mac_address: str
     device_name: str
     model: str | None
     created_at: datetime
@@ -99,8 +99,26 @@ class SensorDataResponse(BaseModel):
 
     id: int
     owner_user_id: uuid.UUID
-    device_id: int  # ЗМІНЕНО
+    device_id: int
     timestamp: datetime
     payload: dict | None
 
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- Admin Repository Schemas ---
+class DeviceRepositoryCreate(BaseModel):
+    mac_address: str = Field(
+        ...,
+        min_length=17,
+        max_length=17,
+        pattern=r"^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$",
+    )
+    model: str
+
+
+class DeviceRepositoryResponse(BaseModel):
+    mac_address: str
+    model: str
+    created_at: datetime
     model_config = ConfigDict(from_attributes=True)

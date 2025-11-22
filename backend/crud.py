@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from jose import jwt, JWTError
 
 # SQLAlchemy
-from database import SensorData, User, Device, DeviceGroup
+from database import SensorData, User, Device, DeviceGroup, DeviceRepository
 import schemas
 from config import settings
 
@@ -25,8 +25,9 @@ def verify_password(plain_password, hashed_password):
 
 
 def get_password_hash(password):
-    password_bytes = password.encode('utf-8')
-    return bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode('utf-8')
+    password_bytes = password.encode("utf-8")
+    return bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode("utf-8")
+
 
 # --- User ---
 def get_user(db: Session, user_id: uuid.UUID):
@@ -122,13 +123,32 @@ def get_devices_by_group(
 
 
 def create_device(db: Session, device: schemas.DeviceCreate, group_id: int):
+    hardware = (
+        db.query(DeviceRepository)
+        .filter(DeviceRepository.mac_address == device.mac_address)
+        .first()
+    )
+
+    if not hardware:
+        raise ValueError("Invalid Device: This MAC address is not in our registry.")
+
+    # The unique constraint in DB handles this, but a clean error message is better
+    existing_owner = (
+        db.query(Device).filter(Device.mac_address == device.mac_address).first()
+    )
+
+    if existing_owner:
+        raise ValueError(
+            "Device Already Active: This device is already registered to a user."
+        )
+
     db_device = Device(
         device_name=device.device_name,
-        model=device.model,
         group_id=group_id,
         local_id=device.local_id,
         mac_address=device.mac_address,
     )
+
     db.add(db_device)
     db.commit()
     db.refresh(db_device)
@@ -160,3 +180,18 @@ def get_sensor_data(
     except Exception as e:
         log.error(f"Помилка запиту до БД: {e}")
         return []
+
+
+# --- ADMIN: Repository ---
+def create_repository_device(db: Session, item: schemas.DeviceRepositoryCreate):
+    db_item = DeviceRepository(mac_address=item.mac_address, model=item.model)
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+
+def get_repository_device(db: Session, mac: str):
+    return (
+        db.query(DeviceRepository).filter(DeviceRepository.mac_address == mac).first()
+    )

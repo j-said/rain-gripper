@@ -13,7 +13,6 @@ from sqlalchemy.orm import (
     sessionmaker,
 )
 from sqlalchemy.sql import func
-from sqlalchemy import Identity
 from sqlalchemy import (
     create_engine,
     Column,
@@ -25,6 +24,8 @@ from sqlalchemy import (
     UniqueConstraint,
     SmallInteger,
     CheckConstraint,
+    Identity,
+    Boolean,
 )
 
 # Local imports
@@ -109,8 +110,8 @@ class DeviceGroup(Base):
         nullable=False,
         index=True,
     )
-    local_name = Column(String(10), nullable=False) # Ім'я в системі
-    display_name = Column(String(100), nullable=False) # Ім'я для користувача
+    local_name = Column(String(10), nullable=False)  # Ім'я в системі
+    display_name = Column(String(100), nullable=False)  # Ім'я для користувача
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
@@ -125,27 +126,56 @@ class DeviceGroup(Base):
     )
 
 
+class DeviceRepository(Base):
+    __tablename__ = "device_repository"
+
+    mac_address = Column(String(17), primary_key=True)
+    model = Column(String(50), nullable=False)
+    production_date = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    # Security: A secret key printed on the device sticker to prove ownership
+    # (Optional, but recommended to prevent people guessing MACs)
+    secret_key = Column(String(50), nullable=True)
+
+    active_assignment = relationship(
+        "Device", back_populates="hardware_info", uselist=False
+    )
+
+
 class Device(Base):
     __tablename__ = "devices"
 
     device_id = Column(BigInteger, Identity(), primary_key=True)
+
+    # Link to the Group
     group_id = Column(
         BigInteger,
         ForeignKey("device_groups.group_id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    mac_address = Column(MACADDR, nullable=False, index=True)
-    local_id = Column(SmallInteger, nullable=False)
 
-    device_name = Column(String(100), nullable=False)  # аналогічно до DeviceGroup
-    model = Column(String(100))
+    # Link to the Factory Hardware
+    mac_address = Column(
+        String(17),
+        ForeignKey("device_repository.mac_address"),
+        nullable=False,
+        unique=True,  # One physical device can only be active for ONE user at a time
+    )
+
+    local_id = Column(SmallInteger, nullable=False)
+    device_name = Column(String(100), nullable=False)
+
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
 
     # ORM Зв'язки
     group = relationship("DeviceGroup", back_populates="devices")
+
+    # Access hardware details (model, etc) through this relationship
+    hardware_info = relationship("DeviceRepository", back_populates="active_assignment")
+
     sensor_data = relationship(
         "SensorData", back_populates="device", cascade="all, delete"
     )
@@ -153,8 +183,6 @@ class Device(Base):
     __table_args__ = (
         # Гарантує, що 'local_id' (1, 2, 3...) унікальний *в межах однієї групи*
         UniqueConstraint("group_id", "local_id", name="uq_group_local_id"),
-        # Гарантує, що MAC унікальний у всій системі
-        UniqueConstraint("mac_address", name="uq_mac_address"),
         # Обмеження 1-255
         CheckConstraint("local_id >= 1 AND local_id <= 255", name="chk_local_id_range"),
     )
@@ -170,7 +198,7 @@ class SensorData(Base):
         ForeignKey("devices.device_id", ondelete="CASCADE"),
         nullable=False,
     )
- 
+
     # ДЕНОРМАЛІЗОВАНА КОЛОНКА вона потрібна для швидких запитів з API
     owner_user_id = Column(
         UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False, index=True

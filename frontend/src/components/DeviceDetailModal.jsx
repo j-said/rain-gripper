@@ -3,85 +3,85 @@ import { X } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format } from 'date-fns';
 
-// Simple Hook to mock history data (Replace with API call later if endpoint exists)
-// Currently your backend only supports getting "latest" data slice easily.
-// We will simulate 24h history for now or query the existing slice endpoint.
-const useDeviceHistory = (deviceId) => {
-    // TODO: Call /api/v1/data/?start_date=...&end_date=...
-    // For now, we generate realistic looking data based on the ID
-    const data = Array.from({ length: 24 }).map((_, i) => ({
-        time: format(new Date().setHours(new Date().getHours() - (23 - i)), 'HH:00'),
-        waterLevel: 20 + Math.random() * 10,
-        temp: 15 + Math.random() * 5,
-        humidity: 60 + Math.random() * 20
+const DeviceDetailModal = ({ device, onClose }) => {
+    const [metric, setMetric] = useState('waterLevel');
+
+    if (!device) return null;
+
+    // Use the REAL history passed from the Dashboard
+    // If no history exists, default to empty array to prevent crashes
+    const history = device.history || [];
+
+    // Format data for the chart (ensure timestamp is readable)
+    const chartData = history.map(log => ({
+        ...log,
+        time: log.timestamp ? format(new Date(log.timestamp), 'HH:mm') : '--',
     }));
-    return { data, isLoading: false };
-};
-
-const DeviceDetailModal = ({ deviceId, onClose }) => {
-    const { data: history, isLoading } = useDeviceHistory(deviceId);
-    const [metric, setMetric] = useState('waterLevel'); // 'waterLevel' | 'temp' | 'humidity'
-
-    if (!deviceId) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className="bg-gray-900 w-full max-w-4xl rounded-2xl border border-gray-800 shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+            <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden border border-gray-100">
 
                 {/* Header */}
-                <div className="flex justify-between items-center p-6 border-b border-gray-800">
+                <div className="flex justify-between items-center p-6 border-b border-gray-100">
                     <div>
-                        <h2 className="text-2xl font-bold text-white">Device Analysis</h2>
-                        <p className="text-gray-400 text-sm">ID: {deviceId}</p>
+                        <h2 className="text-2xl font-bold text-gray-900">{device.device_name}</h2>
+                        <div className="flex items-center space-x-2">
+                            <span className="text-gray-500 text-sm">ID: {device.local_id}</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${device.isOnline ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                {device.isOnline ? 'Online' : 'Offline'}
+                            </span>
+                        </div>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white transition-colors">
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600 transition-colors">
                         <X size={24} />
                     </button>
                 </div>
 
                 {/* Controls */}
-                <div className="flex space-x-4 p-6 pb-0">
-                    {['waterLevel', 'temp', 'humidity'].map(m => (
+                <div className="flex space-x-2 p-6 pb-2">
+                    {['waterLevel', 'airTemp', 'soilHum'].map(m => (
                         <button
                             key={m}
                             onClick={() => setMetric(m)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${metric === m
-                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
-                                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${metric === m
+                                    ? 'bg-green-50 border-green-200 text-green-700'
+                                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
                                 }`}
                         >
-                            {m === 'waterLevel' ? 'Water Level' : m === 'temp' ? 'Temperature' : 'Humidity'}
+                            {m === 'waterLevel' ? 'Water Level' : m === 'airTemp' ? 'Temperature' : 'Soil Humidity'}
                         </button>
                     ))}
                 </div>
 
                 {/* Chart */}
                 <div className="h-[400px] p-6 w-full">
-                    {isLoading ? (
-                        <div className="h-full flex items-center justify-center text-gray-500">Loading history...</div>
+                    {chartData.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-100 rounded-xl">
+                            <p>No historical data available for the last 24 hours.</p>
+                        </div>
                     ) : (
                         <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={history}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                                <XAxis dataKey="time" stroke="#9ca3af" fontSize={12} />
-                                <YAxis stroke="#9ca3af" fontSize={12} />
+                            <LineChart data={chartData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                                <XAxis dataKey="time" stroke="#9ca3af" fontSize={12} tickLine={false} />
+                                <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
                                 <Tooltip
-                                    contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', color: '#f3f4f6' }}
-                                    itemStyle={{ color: '#fff' }}
+                                    contentStyle={{ backgroundColor: '#fff', borderColor: '#e5e7eb', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                    itemStyle={{ color: '#374151', fontWeight: 600 }}
                                 />
                                 <Line
                                     type="monotone"
                                     dataKey={metric}
-                                    stroke={metric === 'waterLevel' ? '#3b82f6' : metric === 'temp' ? '#ef4444' : '#10b981'}
+                                    stroke={metric === 'waterLevel' ? '#3b82f6' : metric === 'airTemp' ? '#ef4444' : '#22c55e'}
                                     strokeWidth={3}
-                                    dot={{ fill: '#1f2937', strokeWidth: 2 }}
-                                    activeDot={{ r: 6 }}
+                                    dot={false}
+                                    activeDot={{ r: 6, fill: '#fff', strokeWidth: 2 }}
                                 />
                             </LineChart>
                         </ResponsiveContainer>
                     )}
                 </div>
-
             </div>
         </div>
     );

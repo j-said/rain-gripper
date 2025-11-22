@@ -155,6 +155,10 @@ class Device(Base):
         index=True,
     )
 
+    @property
+    def model(self):
+        return self.hardware_info.model if self.hardware_info else None
+
     # Link to the Factory Hardware
     mac_address = Column(
         String(17),

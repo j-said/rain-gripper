@@ -26,6 +26,26 @@ export const useLogin = () => {
   });
 };
 
+export const useRegister = () => {
+  const navigate = useNavigate();
+
+  return useMutation({
+    mutationFn: async ({ email, password, username, name }) => {
+      const { data } = await api.post('/api/v1/users/', {
+        email,
+        password,
+        username,
+        name
+      });
+      return data;
+    },
+    onSuccess: () => {
+      // Auto-redirect to login after success
+      navigate('/login?registered=true');
+    },
+  });
+};
+
 export const useCurrentUser = () => {
   const setUser = useAuthStore((state) => state.setUser);
   

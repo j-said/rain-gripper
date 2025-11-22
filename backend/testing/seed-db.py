@@ -192,7 +192,8 @@ def seed():
                 timestamp=time_point,
                 device_id=dev.device_id,
                 owner_user_id=main_user.user_id,
-                payload=json.dumps(payload),  # Storing as JSON String
+                # FIX: Pass the dictionary directly
+                payload=payload
             )
             data_buffer.append(record)
 

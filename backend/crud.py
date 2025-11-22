@@ -2,7 +2,7 @@ import logging
 import uuid
 import bcrypt
 from datetime import datetime, timedelta, timezone
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from jose import jwt, JWTError
 
 # SQLAlchemy
@@ -115,6 +115,7 @@ def get_devices_by_group(
 ):
     return (
         db.query(Device)
+        .options(joinedload(Device.hardware_info)) 
         .filter(Device.group_id == group_id)
         .offset(skip)
         .limit(limit)

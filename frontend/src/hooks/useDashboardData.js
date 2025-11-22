@@ -1,83 +1,103 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '../api/axios';
 import { parseSensorPayload } from '../utils/sensorUtils';
+import { subDays } from 'date-fns';
 
-// 1. Fetch all groups for the user
+// Fetch Groups
 const fetchGroups = async () => {
   const { data } = await api.get('/api/v1/groups/');
   return data;
 };
 
-// 2. Fetch devices for a specific group
+// Fetch Devices for a Group
 const fetchDevicesForGroup = async (groupId) => {
   const { data } = await api.get(`/api/v1/groups/${groupId}/devices/`);
   return data;
 };
 
-// 3. Fetch latest sensor readings (Polled)
-const fetchSensorData = async () => {
-  // We ask for data from 24 hours ago to now to ensure we get the LATEST reading
-  const { data } = await api.get('/api/v1/data/');
-  return data;
+// Fetch FULL Sensor History for the last 24h
+const fetchSensorHistory = async () => {
+  const endDate = new Date();
+  const startDate = subDays(endDate, 1); // Last 24 hours
+  
+  // Use ISO strings for API parameters
+  const params = new URLSearchParams({
+    start_date: startDate.toISOString(),
+    end_date: endDate.toISOString()
+  });
+
+  const { data } = await api.get(`/api/v1/data/?${params.toString()}`);
+  return data; // Returns flat array of all logs for all user's devices
 };
 
 export const useDashboardData = () => {
-  // A. Get Groups
   const { data: groups, isLoading: loadingGroups } = useQuery({
     queryKey: ['groups'],
     queryFn: fetchGroups,
   });
 
-  // B. Get Devices (Run only when groups are loaded)
-  // We define a query for EACH group to get its devices
   const { data: allDevices, isLoading: loadingDevices } = useQuery({
     queryKey: ['allDevices', groups],
     queryFn: async () => {
       if (!groups) return [];
       const promises = groups.map(g => fetchDevicesForGroup(g.group_id));
       const results = await Promise.all(promises);
-      // Flatten [[dev1], [dev2, dev3]] -> [dev1, dev2, dev3]
       return results.flat();
     },
     enabled: !!groups?.length,
   });
 
-  // C. Poll Sensor Data (Every 10 seconds)
-  const { data: sensorLogs } = useQuery({
-    queryKey: ['sensorData'],
-    queryFn: fetchSensorData,
-    refetchInterval: 10000, // 10 seconds
+  // 3. Poll Sensor History (Last 24h) every 5 mins
+  const { data: historyLogs } = useQuery({
+    queryKey: ['sensorHistory'],
+    queryFn: fetchSensorHistory,
+    refetchInterval: 1000 * 60 * 5, 
   });
 
-  // D. MERGE LOGIC
-  const mergedDevices = allDevices?.map(device => {
-    // Find the latest log
-    const deviceLogs = sensorLogs?.filter(log => log.device_id === device.device_id) || [];
-    const latestLog = deviceLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+  //  groups -> devices -> data history
+  const groupsWithDevices = groups?.map(group => {
+    
+    // Filter devices belonging to this group
+    const groupDevices = allDevices?.filter(d => d.group_id === group.group_id) || [];
 
-    const parsedData = parseSensorPayload(latestLog?.payload);
+    // Enrich devices with their specific history
+    const enrichedDevices = groupDevices.map(device => {
+      // Filter logs for this specific device
+      const deviceLogs = historyLogs?.filter(log => log.device_id === device.device_id) || [];
+      
+      // Sort: Newest last (for charts)
+      deviceLogs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      
+      const latestLog = deviceLogs[deviceLogs.length - 1];
+      const parsedLatest = parseSensorPayload(latestLog?.payload);
+
+      // Map logs to clean history objects for charts
+      const cleanHistory = deviceLogs.map(log => ({
+        timestamp: log.timestamp,
+        ...parseSensorPayload(log.payload)
+      }));
+
+      return {
+        ...device,
+        isOnline: !!latestLog,
+        lastSeen: latestLog?.timestamp,
+        // Latest snapshot
+        sensorData: parsedLatest || { 
+          airTemp: null, soilTemp: null, airHum: null, soilHum: null, waterLevel: 0, status: 'offline' 
+        },
+        // Full history for sparklines
+        history: cleanHistory
+      };
+    });
 
     return {
-      ...device,
-      isOnline: !!latestLog,
-      lastSeen: latestLog?.timestamp,
-      sensorData: parsedData || {
-        // FALLBACK VALUES FOR OFFLINE DEVICES
-        airTemp: 'N/A',
-        soilTemp: 'N/A',
-        airHum: 'N/A',
-        soilHum: 'N/A',
-        waterLevel: 0,
-        status: 'offline',
-        // FIX: Add default coordinates (e.g., Kyiv) if no data exists
-        lat: 50.4501,
-        lon: 30.5234
-      }
+      ...group,
+      devices: enrichedDevices
     };
   }) || [];
 
   return {
-    devices: mergedDevices,
+    groupedData: groupsWithDevices,
     isLoading: loadingGroups || loadingDevices,
   };
 };

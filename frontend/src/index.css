@@ -1,23 +1,33 @@
 @import "tailwindcss";
 
 @theme {
-  /* Custom Colors matching the IoT Risk logic */
-  --color-brand-dark: #1e293b;
-  --color-brand-primary: #3b82f6;
+  --color-brand-primary: #16a34a; /* Green 600 */
+  --color-brand-light: #dcfce7;   /* Green 100 */
+  --color-brand-dark: #14532d;    /* Green 900 */
   
-  --color-status-safe: #22c55e;
-  --color-status-warning: #eab308;
   --color-status-danger: #ef4444;
-  --color-status-offline: #64748b;
+  --color-status-warning: #eab308;
+  --color-status-safe: #22c55e;
 }
 
 html, body {
   height: 100%;
-  background-color: var(--color-gray-950);
-  color: var(--color-gray-100);
+  background-color: #f8fafc; /* Bright/Light Gray Background */
+  color: #0f172a;            /* Dark Slate Text */
   font-family: system-ui, -apple-system, sans-serif;
 }
 
-#root {
-  height: 100%;
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1; 
+}
+::-webkit-scrollbar-thumb {
+  background: #888; 
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #16a34a; 
 }

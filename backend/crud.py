@@ -1,8 +1,8 @@
 import logging
 import uuid
+import bcrypt
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
 from jose import jwt, JWTError
 
 # SQLAlchemy
@@ -12,7 +12,6 @@ from config import settings
 
 log = logging.getLogger(__name__)
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ALGORITHM = "HS256"
 # Використовуємо SECRET_KEY з .env
 SECRET_KEY = settings.SECRET_KEY
@@ -20,12 +19,14 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    password_bytes = plain_password.encode("utf-8")
+    hash_bytes = hashed_password.encode("utf-8")
+    return bcrypt.checkpw(password_bytes, hash_bytes)
 
 
 def get_password_hash(password):
-    return pwd_context.hash(password)
-
+    password_bytes = password.encode('utf-8')
+    return bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode('utf-8')
 
 # --- User ---
 def get_user(db: Session, user_id: uuid.UUID):

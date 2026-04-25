@@ -10,6 +10,7 @@ static onewire_bus_handle_t bus = NULL;
 
 static  onewire_bus_config_t bus_config = {
     .bus_gpio_num = CONFIG_DS18B20_GPIO,
+    .flags.en_pull_up = 1,
 };
 
 static onewire_bus_rmt_config_t rmt_config = {

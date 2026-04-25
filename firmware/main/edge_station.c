@@ -82,11 +82,11 @@ void edge_station(void)
         sensors |= DHT22_SENSOR;
     } 
 
-    // esp_err = ds18b20_init();
-    // ESP_LOGI(TAG, "DS18B20 init: %d", esp_err);
-    // if (!esp_err) {
-    //     sensors |= DS18B20_SENSOR;
-    // } 
+    esp_err = ds18b20_init();
+    ESP_LOGI(TAG, "DS18B20 init: %d", esp_err);
+    if (!esp_err) {
+        sensors |= DS18B20_SENSOR;
+    } 
 
     esp_err = hd38_init(adc_unit_get_handle());
     ESP_LOGI(TAG, "HD38 init: %d", esp_err);

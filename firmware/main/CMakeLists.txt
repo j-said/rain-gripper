@@ -1,4 +1,4 @@
-idf_component_register(SRCS "adc_unit.c" "sensor_raindrop.c" "app_main.c" 
+idf_component_register(SRCS "gsm_modem.cpp" "adc_unit.c" "sensor_raindrop.c" "app_main.c" 
                             "edge_station.c" 
                             "main_station.c" 
                             "sensor_dht22.c"

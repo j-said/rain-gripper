@@ -65,6 +65,7 @@ static const int CONNECT_BIT = BIT0;
 static const int DISCONNECT_BIT = BIT1;
 static const int MQTT_CONNECTED = BIT2;
 static const int MQTT_DISCONNECTED = BIT3;
+static char json_buffer[1024];
 
 SemaphoreHandle_t   station_mutex; // Mutex for protecting access to weater data 
 weather_condition_t main_station_data = {
@@ -359,11 +360,11 @@ void main_station(void)
         sensors |= DHT22_SENSOR;
     } 
 
-    // esp_err = ds18b20_init();
-    // ESP_LOGI(TAG, "DS18B20 init: %d", esp_err);
-    // if (!esp_err) {
-    //     sensors |= DS18B20_SENSOR;
-    // }
+    esp_err = ds18b20_init();
+    ESP_LOGI(TAG, "DS18B20 init: %d", esp_err);
+    if (!esp_err) {
+        sensors |= DS18B20_SENSOR;
+    }
 
     esp_err = hd38_init(adc_unit_get_handle());
     ESP_LOGI(TAG, "HD38 init: %d", esp_err);
@@ -472,20 +473,44 @@ void main_station(void)
         if (isnan(main.air_humidity)) {
             main.air_humidity = 0.0;
         }
+        if (isnan(main.air_temperature)) {
+            main.air_temperature = 0.0;
+        }
+        if (isnan(main.soil_humidity)) {
+            main.soil_humidity = 0.0;
+        }
+        if (isnan(main.soil_temperature)) {
+            main.soil_temperature = 0.0;
+        }
 
         set_station_data(&main); 
         get_station_data(&edge_station_data);
+
+
         if (isnan(edge_station_data.rainfall)) {
             edge_station_data.rainfall = 0.0;
         }
         if (isnan(edge_station_data.air_humidity)) {
             edge_station_data.air_humidity = 0.0;
         }
+        if (isnan(edge_station_data.air_temperature)) {
+            edge_station_data.air_temperature = 0.0;
+        }
+        if (isnan(edge_station_data.soil_humidity)) {
+            edge_station_data.soil_humidity = 0.0;
+        }
+        if (isnan(edge_station_data.soil_temperature)) {
+            edge_station_data.soil_temperature = 0.0;
+        }
 
-        char json_buffer[512];
-        snprintf(json_buffer, sizeof(json_buffer), "{\"b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33\": {\"humidity\": %.1f, \"water_level\": %.5f}, \"38956513-174a-4bb8-830a-bf95bc47aa2b\": {\"humidity\": %.1f, \"water_level\": %.5f}}", 
-                main.air_humidity, main.rainfall, edge_station_data.air_humidity, edge_station_data.rainfall);
-        esp_mqtt_client_publish(mqtt_client, "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11/f0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22/logs", 
+
+        
+        snprintf(json_buffer, sizeof(json_buffer), "{\"1\": {\"soil humidity\": %.1f, \"soil temperature\": %.1f, \"water_level\": %.5f, \"air tempriture\": %.1f, \"air humidity\": %.1f}, "
+                                                    "\"2\": {\"soil humidity\": %.1f, \"soil temperature\": %.1f, \"water_level\": %.5f, \"air tempriture\": %.1f, \"air humidity\": %.1f}}", 
+                main.soil_humidity, main.soil_temperature, main.rainfall, main.air_temperature, main.air_humidity,
+                edge_station_data.soil_humidity, edge_station_data.soil_temperature, edge_station_data.rainfall, edge_station_data.air_temperature, edge_station_data.air_humidity);
+        
+        esp_mqtt_client_publish(mqtt_client, "b7fa8001-52c3-4d5e-a8cb-50ce3637d27e/a/data", 
                                            json_buffer , 0, 1, 0);
         ESP_LOGI(TAG,"%s", json_buffer); 
         vTaskDelay(5000/portTICK_PERIOD_MS);
